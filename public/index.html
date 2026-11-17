@@ -1431,7 +1431,9 @@
 
       perbaruiIkonPrivasi();
       setupSwipeGesture();
-      muatDataDashboard(false);
+      setTimeout(() => {
+  muatDataDashboard(false);
+}, 500);
       refreshIcons();
     });
 
