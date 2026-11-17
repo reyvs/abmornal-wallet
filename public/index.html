@@ -1322,7 +1322,7 @@
                 if (!response.ok) throw new Error('HTTP ' + response.status + '. Periksa login Cloudflare Access / konfigurasi API.');
                 const data = await response.json();
                 if (!data.success) throw new Error(data.message || 'API error');
-                return data.result;
+                return data;
               })
               .then(result => { if (typeof success === 'function') success(result); })
               .catch(err => {
