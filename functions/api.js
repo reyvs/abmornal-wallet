@@ -4,8 +4,17 @@
 const ALLOWED_ACTIONS = new Set(["getDashboardData", "simpanLimitConfig", "simpanTagihanRutin", "bayarTagihanRutinSekarang", "toggleTagihanRutin", "hapusTagihanRutin", "tambahWalletBaru", "hapusWallet", "transferAntarWallet", "prosesTransaksi", "simpanTransaksiManual", "editTransaksi", "hapusTransaksi", "analisisKeuanganAI"]);
 
 export async function onRequestPost({ request, env }) {
-  if (!env.APPS_SCRIPT_URL || !env.CLOUDFLARE_API_SECRET) {
-    return Response.json({ success: false, message: 'Missing server configuration' }, { status: 503 });
+  const missing = [
+    !env.APPS_SCRIPT_URL && 'APPS_SCRIPT_URL',
+    !env.CLOUDFLARE_API_SECRET && 'CLOUDFLARE_API_SECRET'
+  ].filter(Boolean);
+  if (missing.length) {
+    return Response.json({
+      success: false,
+      message: 'Missing server configuration',
+      missingVariables: missing,
+      deploymentBranch: env.CF_PAGES_BRANCH || 'unknown'
+    }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
   const size = Number(request.headers.get('content-length') || 0);
   if (size > 6_000_000) return Response.json({ success: false, message: 'Request too large (max 6 MB)' }, { status: 413 });
