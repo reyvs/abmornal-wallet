@@ -1,0 +1,9 @@
+{
+  "name": "Abmornal Wallet",
+  "short_name": "Wallet",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#16171F",
+  "theme_color": "#16171F"
+}
