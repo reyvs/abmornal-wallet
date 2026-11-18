@@ -178,8 +178,56 @@
       background: transparent;
     }
 
-    /* Loading screen minimal: identitas visual dark + lime + purple. */
+    /* iPhone Home Screen/PWA: app canvas fills the entire visual viewport. */
+    html, body { min-height: 100%; height: 100%; overflow: hidden; background: #16171F; }
+    #appScrollArea {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      box-sizing: border-box;
+      padding-top: max(0px, env(safe-area-inset-top, 0px));
+      padding-bottom: calc(7.75rem + env(safe-area-inset-bottom, 0px));
+      background:
+        radial-gradient(ellipse at 11% 0%, rgba(110, 63, 243, .15), transparent 42%),
+        radial-gradient(ellipse at 92% 7%, rgba(181, 248, 58, .08), transparent 36%),
+        linear-gradient(180deg, #16171F 0%, #191B24 58%, #16171F 100%);
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #bottomAppNav {
+      bottom: calc(max(10px, env(safe-area-inset-bottom, 0px)) + 6px);
+      transition: opacity .65s ease, transform .75s cubic-bezier(.22,1,.36,1);
+    }
+    #toastNotif {
+      top: max(18px, calc(env(safe-area-inset-top, 0px) + 14px));
+      box-sizing: border-box;
+      width: max-content;
+      max-width: calc(100vw - 32px);
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+    /* Gentle bottom-up entrance: loaded values are painted before the overlay leaves. */
+    body.is-booting #pageHome .ui-reveal {
+      opacity: 0;
+      transform: translate3d(0, 28px, 0);
+    }
+    body.ui-ready #pageHome .ui-reveal {
+      animation: wallet-ui-reveal .72s cubic-bezier(.22,1,.36,1) both;
+      animation-delay: var(--reveal-delay, 100ms);
+    }
+    body.is-booting #bottomAppNav { opacity: 0; transform: translateY(24px); }
+    body.ui-ready #bottomAppNav { opacity: 1; transform: translateY(0); transition-delay: .52s; }
+    @keyframes wallet-ui-reveal {
+      from { opacity: 0; transform: translate3d(0, 28px, 0); filter: blur(5px); }
+      to { opacity: 1; transform: translate3d(0, 0, 0); filter: blur(0); }
+    }
+
+    /* Full-screen Aurora loader with progress shown by the rising gradient level. */
     .startup-screen {
+      --loader-progress: 0%;
       position: fixed;
       inset: 0;
       z-index: 100;
@@ -187,113 +235,187 @@
       align-items: center;
       justify-content: center;
       box-sizing: border-box;
-      padding: 28px 24px;
-      background: #16171F;
+      overflow: hidden;
+      isolation: isolate;
+      background: #030707;
       color: #F8FAFC;
       opacity: 1;
       visibility: visible;
-      transition: opacity .35s ease, visibility .35s ease;
+      transition: opacity .9s cubic-bezier(.22,1,.36,1), visibility .9s;
     }
     .startup-screen.is-done { opacity: 0; visibility: hidden; pointer-events: none; }
-    .startup-inner { width: 100%; max-width: 300px; text-align: center; }
-    .startup-spinner {
-      width: 44px;
-      height: 44px;
-      box-sizing: border-box;
-      margin: 0 auto 30px;
-      border: 3px solid rgba(181,248,58,.13);
-      border-top-color: #B5F83A;
-      border-right-color: #6E3FF3;
-      border-radius: 50%;
-      animation: startup-spin 1s linear infinite;
+    .startup-progress {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .startup-progress-fill {
+      position: absolute;
+      inset: 0;
+      clip-path: inset(calc(100% - var(--loader-progress)) 0 0 0);
+      transition: clip-path .55s cubic-bezier(.22,1,.36,1);
+      will-change: clip-path;
+    }
+    .startup-progress-fill::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% - var(--loader-progress));
+      height: 2px;
+      background: linear-gradient(90deg, rgba(181,248,58,0) 0%, rgba(181,248,58,.9) 26%, rgba(115,78,255,.95) 72%, rgba(115,78,255,0) 100%);
+      box-shadow: 0 0 26px rgba(181,248,58,.3), 0 0 34px rgba(111,62,255,.34);
+      transform: translateY(-1px);
+      transition: top .55s cubic-bezier(.22,1,.36,1);
+    }
+    .startup-aurora { position: absolute; inset: -10%; pointer-events: none; z-index: 0; }
+    .startup-wave {
+      position: absolute;
+      width: 164%;
+      height: 72%;
+      bottom: -29%;
+      left: -33%;
+      border-radius: 49% 51% 60% 40% / 55% 55% 45% 45%;
+      filter: blur(37px);
+      opacity: .9;
+      will-change: transform;
+      transform-origin: center;
+    }
+    .startup-wave--purple {
+      background: radial-gradient(ellipse at 42% 41%, rgba(131, 55, 255, .94) 0%, rgba(109, 51, 230, .7) 31%, rgba(75, 24, 165, .13) 69%, transparent 79%);
+      animation: wallet-aurora-rise 7.2s ease-in-out infinite alternate;
+    }
+    .startup-wave--lime {
+      width: 170%; height: 58%; left: -27%; bottom: -12%;
+      border-radius: 45% 55% 40% 60% / 43% 59% 41% 57%;
+      background: radial-gradient(ellipse at 56% 24%, rgba(181,248,58,.95) 0%, rgba(111,209,38,.64) 26%, rgba(56,139,44,.14) 59%, transparent 78%);
+      animation: wallet-aurora-lime 8.1s ease-in-out infinite alternate;
+      mix-blend-mode: screen;
+    }
+    .startup-wave--purple-top {
+      width: 120%; height: 54%; left: -42%; bottom: 8%;
+      opacity: .65;
+      background: radial-gradient(ellipse at 55% 55%, rgba(109,58,235,.8) 0%, rgba(80,38,200,.32) 40%, transparent 75%);
+      animation: wallet-aurora-side 9s ease-in-out infinite alternate;
+    }
+    .startup-aurora::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(2,5,5,.65) 0%, rgba(2,5,5,.28) 25%, transparent 42%, transparent 74%, rgba(2,5,5,.24) 100%);
+    }
+    .startup-grain {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: .12;
+      mix-blend-mode: screen;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.54'/%3E%3C/svg%3E");
+    }
+    .startup-inner {
+      position: relative;
+      z-index: 2;
+      width: calc(100% - 48px);
+      max-width: 340px;
+      text-align: center;
+      transform: translateY(-4vh);
     }
     .startup-heading {
       margin: 0;
       color: #F8FAFC;
-      font-size: 21px;
-      font-weight: 800;
-      line-height: 1.35;
+      font: 800 clamp(17px, 4.5vw, 21px)/1.4 'Plus Jakarta Sans', sans-serif;
       letter-spacing: -.035em;
-    }
-    .startup-copy {
-      margin: 9px auto 0;
-      color: #94A3B8;
-      font-size: 12px;
-      line-height: 1.6;
-      font-weight: 500;
-      max-width: 260px;
-      min-height: 20px;
-    }
-    .startup-progress {
-      width: 160px;
-      height: 3px;
-      overflow: hidden;
-      border-radius: 99px;
-      margin: 27px auto 0;
-      background: rgba(255,255,255,.09);
-    }
-    .startup-progress-fill {
-      width: 38%;
-      height: 100%;
-      background: #B5F83A;
-      border-radius: inherit;
-      animation: startup-progress-move 1.5s ease-in-out infinite;
-    }
-    .startup-status {
-      margin: 13px 0 0;
-      color: #94A3B8;
-      font-size: 11px;
-      line-height: 1.5;
-    }
-    .startup-pulse-dot {
-      display: inline-block;
-      vertical-align: 1px;
-      width: 5px;
-      height: 5px;
-      margin-right: 7px;
-      border-radius: 50%;
-      background: #B5F83A;
-      animation: startup-dot 1.3s ease-in-out infinite;
+      text-shadow: 0 4px 32px rgba(0,0,0,.5);
+      animation: startup-text-breathe 2.9s ease-in-out infinite;
     }
     .startup-retry {
       display: none;
       align-items: center;
       justify-content: center;
-      margin: 23px auto 0;
-      border: 0;
-      border-radius: 12px;
-      padding: 11px 17px;
+      margin: 22px auto 0;
+      border: 1px solid rgba(255,255,255,.4);
+      border-radius: 999px;
+      padding: 12px 20px;
       background: #B5F83A;
       color: #16171F;
       font: 800 12px 'Plus Jakarta Sans', sans-serif;
       cursor: pointer;
     }
     .startup-retry.is-visible { display: inline-flex; }
-    .startup-retry:focus-visible { outline: 2px solid #FFF; outline-offset: 4px; }
-    .startup-screen.is-error .startup-spinner { animation: none; border-color: rgba(251,113,133,.18); border-top-color: #FB7185; }
-    .startup-screen.is-error .startup-progress-fill { animation: none; width: 100%; background: #FB7185; }
-    .startup-screen.is-error .startup-pulse-dot { animation: none; background: #FB7185; }
-    @keyframes startup-spin { to { transform: rotate(360deg); } }
-    @keyframes startup-progress-move { from { transform: translateX(-110%); } to { transform: translateX(350%); } }
-    @keyframes startup-dot { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+    .startup-screen.is-error .startup-heading { animation: none; }
+    @keyframes wallet-aurora-rise {
+      from { transform: translate3d(-8%, 10%, 0) rotate(-22deg) scale(1); }
+      to { transform: translate3d(13%, -30%, 0) rotate(-6deg) scale(1.22); }
+    }
+    @keyframes wallet-aurora-lime {
+      from { transform: translate3d(8%, 23%, 0) rotate(-25deg) scale(1); }
+      to { transform: translate3d(-18%, -41%, 0) rotate(-5deg) scale(1.25); }
+    }
+    @keyframes wallet-aurora-side {
+      from { transform: translate3d(-8%, 8%, 0) rotate(20deg) scale(.94); }
+      to { transform: translate3d(31%, -39%, 0) rotate(37deg) scale(1.12); }
+    }
+    @keyframes startup-text-breathe { 0%,100% { opacity: .82; } 50% { opacity: 1; } }
+
+    /* Compact smart input suggestions / busy state. */
+    .ai-chip-scroll {
+      display: flex;
+      gap: 7px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      padding: 2px 2px 6px;
+    }
+    .ai-chip-scroll::-webkit-scrollbar { display: none; }
+    .ai-chip {
+      flex: 0 0 auto;
+      min-height: 31px;
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 999px;
+      padding: 6px 11px;
+      background: rgba(255,255,255,.045);
+      color: #CBD5E1;
+      font: 700 11px 'Plus Jakarta Sans', sans-serif;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s, background .15s, transform .15s;
+    }
+    .ai-chip:active { transform: scale(.95); }
+    .ai-chip--wallet { color: #B5F83A; background: rgba(181,248,58,.07); border-color: rgba(181,248,58,.2); }
+    .ai-chip:focus-visible { outline: 2px solid #B5F83A; outline-offset: 2px; }
+    .ai-chip:disabled { opacity: .4; cursor: not-allowed; }
+    .ai-busy-note { display: none; align-items: center; gap: 9px; color: #CBD5E1; font-size: 11px; line-height: 1.55; }
+    .ai-busy-note.is-visible { display: flex; }
+    .ai-busy-dot { width: 7px; height: 7px; border-radius: 50%; background: #B5F83A; box-shadow: 0 0 0 4px rgba(181,248,58,.1); animation: startup-text-breathe 1.05s ease-in-out infinite; flex: 0 0 auto; }
+    #btnKirimAi:disabled { opacity: .78; cursor: progress; filter: saturate(.8); }
     @media (prefers-reduced-motion: reduce) {
-      .startup-spinner, .startup-progress-fill, .startup-pulse-dot { animation: none !important; }
+      .startup-wave, .startup-heading, .ai-busy-dot { animation: none !important; }
       .startup-screen { transition-duration: .1s; }
+      body.ui-ready #pageHome .ui-reveal { animation-duration: .1s; animation-delay: 0s; }
+      #bottomAppNav { transition-duration: .1s; transition-delay: 0s; }
     }
   </style>
 </head>
-<body class="bg-obsidian-gradient overflow-hidden select-none">
+<body class="bg-obsidian-gradient overflow-hidden select-none is-booting">
 
 
-  <!-- Loading screen minimal. Tetap terlihat hingga data saldo berhasil dirender. -->
+  <!-- Single-label floating aurora loader with vertical progress level, visible until the dashboard data is ready. -->
   <div id="startupScreen" class="startup-screen" role="status" aria-live="polite" aria-label="Memuat data keuangan">
+    <div class="startup-progress" aria-hidden="true">
+      <div id="startupProgressFill" class="startup-progress-fill">
+        <div class="startup-aurora">
+          <div class="startup-wave startup-wave--purple"></div>
+          <div class="startup-wave startup-wave--lime"></div>
+          <div class="startup-wave startup-wave--purple-top"></div>
+        </div>
+      </div>
+    </div>
+    <div class="startup-grain" aria-hidden="true"></div>
     <div class="startup-inner">
-      <div class="startup-spinner" aria-hidden="true"></div>
       <h1 id="startupHeading" class="startup-heading">Menyiapkan dompetmu</h1>
-      <p id="startupDescription" class="startup-copy">Mengambil saldo dan transaksi terbaru...</p>
-      <div class="startup-progress" aria-hidden="true"><div class="startup-progress-fill"></div></div>
-      <p id="startupStatus" class="startup-status"><span class="startup-pulse-dot"></span>Menyinkronkan data keuangan...</p>
-      <button type="button" id="startupRetry" class="startup-retry" onclick="muatDataDashboard(false)">Coba Muat Lagi</button>
+      <button type="button" id="startupRetry" class="startup-retry" onclick="muatDataDashboard(false)">Coba muat lagi</button>
     </div>
   </div>
 
@@ -315,7 +437,7 @@
   <div id="pageHome" class="max-w-md mx-auto px-4 pt-5 space-y-4">
 
     <!-- Sub-Tab Navigasi Halaman Utama agar Tata Letak Lega & Fokus -->
-    <div class="glass-card p-1.5 rounded-full grid grid-cols-3 gap-1">
+    <div class="glass-card p-1.5 rounded-full grid grid-cols-3 gap-1 ui-reveal" style="--reveal-delay: 60ms">
       <button type="button" id="homeSubTabBtnDompet" onclick="gantiSubTabHome('dompet')"
         class="flex items-center justify-center gap-1.5 py-2 px-2 rounded-full text-[11px] font-extrabold bg-[#B5F83A] text-[#13141B] shadow transition">
         <i data-lucide="wallet" class="w-3.5 h-3.5"></i>
@@ -338,7 +460,7 @@
          ==================================================================== -->
     <div id="homeSubPanelDompet" class="space-y-4">
       <!-- Header Ringkas Total Saldo Gabungan -->
-      <header class="px-1 pt-1 flex items-start justify-between gap-3">
+      <header class="px-1 pt-1 flex items-start justify-between gap-3 ui-reveal" style="--reveal-delay: 140ms">
         <div>
           <div class="flex items-center gap-2">
             <span class="inline-flex h-2 w-2 rounded-full bg-[#B5F83A]"></span>
@@ -375,7 +497,7 @@
       </header>
 
       <!-- Kartu Stack Dompet Interaktif dengan Cutout Notch Mini Progress Bar Limit (Reference 1) -->
-      <section aria-label="Kartu Wallet" class="space-y-2.5 pt-1">
+      <section aria-label="Kartu Wallet" class="space-y-2.5 pt-1 ui-reveal" style="--reveal-delay: 230ms">
         <div class="flex items-center justify-between px-1">
           <div class="flex items-center gap-2">
             <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Dompet Saya</h2>
@@ -415,7 +537,7 @@
       </section>
 
       <!-- Tombol Aksi Cepat -->
-      <section class="grid grid-cols-2 gap-2.5">
+      <section class="grid grid-cols-2 gap-2.5 ui-reveal" style="--reveal-delay: 350ms">
         <button type="button" onclick="bukaModalTransfer()"
           class="flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-[#6E3FF3] hover:bg-[#7c52f5] text-white text-xs font-bold shadow-lg shadow-[#6E3FF3]/25 transition active:scale-[0.98]">
           <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
@@ -569,6 +691,12 @@
               class="glass-input w-full rounded-2xl p-3.5 text-sm placeholder:text-slate-500 resize-none"></textarea>
           </div>
 
+          <!-- Smart chips: transaction words + wallet names loaded from the active sheet. -->
+          <div class="space-y-1.5">
+            <p class="text-[10px] font-bold text-slate-500 px-1">Ketik lebih cepat</p>
+            <div id="aiQuickChips" class="ai-chip-scroll" aria-label="Saran kata untuk chat AI"></div>
+          </div>
+
           <!-- Preview Gambar Nota / Screenshot -->
           <div id="previewGambarContainer" class="hidden items-center justify-between gap-3 p-2.5 rounded-2xl bg-[#6E3FF3]/15 border border-[#6E3FF3]/35">
             <div class="flex items-center gap-2.5 min-w-0">
@@ -585,7 +713,7 @@
 
           <div class="flex items-center gap-2">
             <input type="file" id="inputGambarAI" accept="image/*" class="hidden" onchange="handlePilihGambarAI(event)" />
-            <button type="button" onclick="document.getElementById('inputGambarAI').click()"
+            <button type="button" id="btnNotaAI" onclick="document.getElementById('inputGambarAI').click()"
               class="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.11] border border-white/[0.1] text-slate-200 text-xs font-semibold transition shrink-0">
               <i data-lucide="camera" class="w-4 h-4 text-[#B5F83A]"></i>
               <span>Nota / SS</span>
@@ -596,6 +724,11 @@
               <i data-lucide="send" class="w-3.5 h-3.5"></i>
               <span>Proses dengan AI</span>
             </button>
+          </div>
+
+          <div id="aiBusyNote" class="ai-busy-note" role="status" aria-live="polite">
+            <span class="ai-busy-dot" aria-hidden="true"></span>
+            <span>Gemini sedang memproses transaksi. Jangan kirim ulang.</span>
           </div>
 
           <!-- Kartu Ringkasan Hasil Ekstraksi AI -->
@@ -677,7 +810,7 @@
     <!-- ====================================================================
          SECTION RIWAYAT TRANSAKSI (AKORDEON RINGKAS + FILTER LIPAT)
          ==================================================================== -->
-    <section class="glass-card rounded-3xl p-4 space-y-3">
+    <section class="glass-card rounded-3xl p-4 space-y-3 ui-reveal" style="--reveal-delay: 480ms">
       <div class="flex items-center justify-between gap-2">
         <div>
           <h2 class="text-sm font-bold text-slate-100">Riwayat Transaksi</h2>
@@ -1442,7 +1575,7 @@
   </div>
 
   <!-- Toast Notification -->
-  <div id="toastNotif" class="fixed top-4 left-1/2 -translate-x-1/2 z-[60] hidden items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#111827]/95 backdrop-blur-xl border border-white/15 text-xs font-semibold text-white shadow-2xl max-w-[90vw]">
+  <div id="toastNotif" role="status" aria-live="polite" class="fixed left-1/2 -translate-x-1/2 z-[60] hidden items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#111827]/95 backdrop-blur-xl border border-white/15 text-xs font-semibold text-white shadow-2xl max-w-[90vw]">
     <span id="toastText">Notifikasi</span>
   </div>
 
@@ -1489,62 +1622,88 @@
     const isGasEnvironment = (typeof google !== 'undefined' && google.script && google.script.run);
 
 
-    // Loader hanya untuk kunjungan pertama. Hilang setelah angka saldo dirender.
+    // Loader hanya untuk kunjungan pertama. Progress terlihat dari posisi gradient yang naik dari bawah ke atas.
     let startupDashboardReady = false;
     let dashboardLoadSequence = 0;
     let startupSlowTimer = null;
+    let startupProgress = 0;
+    let startupProgressTimer = null;
+
+    function setStartupProgress(value, instant = false) {
+      startupProgress = Math.max(0, Math.min(100, Number(value) || 0));
+      const screen = document.getElementById('startupScreen');
+      if (!screen) return;
+      if (instant) screen.style.setProperty('--loader-progress', startupProgress + '%');
+      else requestAnimationFrame(() => screen.style.setProperty('--loader-progress', startupProgress + '%'));
+    }
+
+    function mulaiAnimasiProgressStartup() {
+      clearInterval(startupProgressTimer);
+      startupProgressTimer = setInterval(() => {
+        if (startupDashboardReady) {
+          clearInterval(startupProgressTimer);
+          return;
+        }
+        const limit = 84;
+        if (startupProgress >= limit) return;
+        const next = startupProgress + (startupProgress < 24 ? 8 : startupProgress < 54 ? 6 : 3.5);
+        setStartupProgress(Math.min(limit, next));
+      }, 360);
+    }
 
     function mulaiStartupLoading() {
       if (startupDashboardReady) return;
       const screen = document.getElementById('startupScreen');
       const heading = document.getElementById('startupHeading');
-      const description = document.getElementById('startupDescription');
-      const status = document.getElementById('startupStatus');
       const retry = document.getElementById('startupRetry');
       if (!screen) return;
       screen.classList.remove('is-error');
       if (heading) heading.textContent = 'Menyiapkan dompetmu';
-      if (description) description.textContent = 'Mengambil saldo dan transaksi terbaru...';
-      if (status) status.innerHTML = '<span class="startup-pulse-dot"></span>Menyinkronkan data keuangan...';
       if (retry) retry.classList.remove('is-visible');
+      setStartupProgress(6, true);
+      mulaiAnimasiProgressStartup();
       clearTimeout(startupSlowTimer);
-      // Koneksi lambat tidak memaksa halaman tampil dengan saldo Rp 0.
+      // Beri opsi ulang untuk koneksi sangat lambat, tanpa menampilkan saldo palsu.
       startupSlowTimer = setTimeout(() => {
         if (startupDashboardReady) return;
-        if (description) description.textContent = 'Koneksi memerlukan waktu lebih lama dari biasanya.';
-        if (status) status.innerHTML = '<span class="startup-pulse-dot"></span>Masih menghubungkan ke Google Sheets...';
+        if (heading) heading.textContent = 'Masih menyiapkan dompetmu';
         if (retry) retry.classList.add('is-visible');
+        setStartupProgress(Math.max(startupProgress, 90));
       }, 15000);
     }
 
     function gagalStartupLoading(message) {
       if (startupDashboardReady) return;
       clearTimeout(startupSlowTimer);
+      clearInterval(startupProgressTimer);
       const screen = document.getElementById('startupScreen');
-      if (screen) screen.classList.add('is-error');
       const heading = document.getElementById('startupHeading');
-      const description = document.getElementById('startupDescription');
-      const status = document.getElementById('startupStatus');
       const retry = document.getElementById('startupRetry');
+      if (screen) screen.classList.add('is-error');
       if (heading) heading.textContent = 'Saldo belum bisa dimuat';
-      if (description) description.textContent = 'Belum terhubung ke data wallet. Silakan coba lagi.';
-      if (status) {
-        status.textContent = String(message || 'Gagal memuat data.').slice(0, 170);
+      if (retry) {
+        retry.title = String(message || 'Gagal memuat data.').slice(0, 160);
+        retry.classList.add('is-visible');
       }
-      if (retry) retry.classList.add('is-visible');
     }
 
     function selesaiStartupLoading() {
       if (startupDashboardReady) return;
       startupDashboardReady = true;
       clearTimeout(startupSlowTimer);
-      // Dua frame memastikan angka saldo sudah masuk DOM dan sempat dilukis browser.
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const screen = document.getElementById('startupScreen');
-        if (!screen) return;
-        screen.classList.add('is-done');
-        setTimeout(() => screen.remove(), 550);
-      }));
+      clearInterval(startupProgressTimer);
+      setStartupProgress(100);
+      // After the saldo is painted, let the gradient finish reaching the top, then crossfade the aurora as panels rise in sequence.
+      setTimeout(() => {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          document.body.classList.remove('is-booting');
+          document.body.classList.add('ui-ready');
+          const screen = document.getElementById('startupScreen');
+          if (!screen) return;
+          screen.classList.add('is-done');
+          setTimeout(() => screen.remove(), 1050);
+        }));
+      }, 560);
     }
 
     // State Aplikasi
@@ -1641,6 +1800,7 @@
       if (scrollArea) scrollArea.scrollTop = 0;
       perbaruiIkonPrivasi();
       setupSwipeGesture();
+      renderKataCepatAI();
       // Tunggu layout PWA iOS stabil sebelum pengambilan data pertama.
       setTimeout(() => muatDataDashboard(false), 300);
       refreshIcons();
@@ -1805,6 +1965,7 @@
         isiDropdownRekapBulanan();
         renderRekapBulanan();
         isiOpsiWalletDanKategori();
+        renderKataCepatAI();
         renderDaftarTransaksi();
         renderKalenderBulanan();
         renderNotifikasiTab();
@@ -2593,7 +2754,71 @@
       if (card) card.classList.add('hidden');
     }
 
+    // Prevent repeated AI POSTs (and duplicate sheet rows) within one pending request.
+    let aiRequestPending = false;
+    function aturStatusProsesAI(isProcessing) {
+      aiRequestPending = isProcessing;
+      const btn = document.getElementById('btnKirimAi');
+      const note = document.getElementById('aiBusyNote');
+      const input = document.getElementById('inputAiText');
+      const fileInput = document.getElementById('inputGambarAI');
+      const notaBtn = document.getElementById('btnNotaAI');
+      const chips = document.getElementById('aiQuickChips');
+      if (btn) {
+        btn.disabled = isProcessing;
+        btn.setAttribute('aria-busy', isProcessing ? 'true' : 'false');
+        btn.innerHTML = isProcessing
+          ? '<i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i><span>Memproses transaksi...</span>'
+          : '<i data-lucide="send" class="w-3.5 h-3.5"></i><span>Proses dengan AI</span>';
+      }
+      if (note) note.classList.toggle('is-visible', isProcessing);
+      if (input) input.readOnly = isProcessing;
+      if (fileInput) fileInput.disabled = isProcessing;
+      if (notaBtn) notaBtn.disabled = isProcessing;
+      if (chips) chips.querySelectorAll('button').forEach(b => { b.disabled = isProcessing; });
+      refreshIcons();
+    }
+
+    function sisipkanKataAI(kata) {
+      if (aiRequestPending) return;
+      const input = document.getElementById('inputAiText');
+      if (!input) return;
+      const current = input.value;
+      const begin = typeof input.selectionStart === 'number' ? input.selectionStart : current.length;
+      const end = typeof input.selectionEnd === 'number' ? input.selectionEnd : current.length;
+      const prefix = current.slice(0, begin);
+      const suffix = current.slice(end);
+      const leadingSpace = prefix && !/\s$/.test(prefix) ? ' ' : '';
+      const trailingSpace = !suffix || !/^\s/.test(suffix) ? ' ' : '';
+      const insertion = leadingSpace + String(kata) + trailingSpace;
+      input.value = prefix + insertion + suffix;
+      const caret = begin + insertion.length;
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(caret, caret);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function renderKataCepatAI() {
+      const el = document.getElementById('aiQuickChips');
+      if (!el) return;
+      const words = ['Beli', 'Transfer', 'Masuk', 'Tax'];
+      const names = [...new Set((appState.wallets || []).map(w => String(w.nama || '').trim()).filter(Boolean))];
+      if (!names.length) names.push('BCA', 'Tunai');
+      const chip = (token, isWallet) =>
+        `<button type="button" class="ai-chip ${isWallet ? 'ai-chip--wallet' : ''}" data-ai-word="${escapeAttr(token)}" ${aiRequestPending ? 'disabled' : ''}>${isWallet ? '<span aria-hidden="true">◈</span> ' : ''}${escapeHtml(token)}</button>`;
+      el.innerHTML = words.map(w => chip(w, false)).concat(names.map(w => chip(w, true))).join('');
+      // Listen only once; updating wallet chips cannot attach duplicate listeners.
+      if (!el.dataset.listenerAdded) {
+        el.addEventListener('click', (event) => {
+          const btn = event.target.closest('button[data-ai-word]');
+          if (btn && !btn.disabled) sisipkanKataAI(btn.dataset.aiWord);
+        });
+        el.dataset.listenerAdded = '1';
+      }
+    }
+
     function kirimTransaksiAI() {
+      if (aiRequestPending) return;
       const teks = document.getElementById('inputAiText').value.trim();
       const imageData = appState.selectedImageBase64
         ? { base64: appState.selectedImageBase64, mimeType: appState.selectedImageMime }
@@ -2604,11 +2829,10 @@
         return;
       }
 
-      const btn = document.getElementById('btnKirimAi');
-      if (btn) btn.disabled = true;
+      aturStatusProsesAI(true);
 
       const selesai = (res) => {
-        if (btn) btn.disabled = false;
+        aturStatusProsesAI(false);
         if (!res || !res.success) {
           tampilkanToast(res && res.message ? res.message : 'Gagal memproses AI');
           return;
@@ -2656,8 +2880,8 @@
       google.script.run
         .withSuccessHandler(selesai)
         .withFailureHandler((err) => {
-          if (btn) btn.disabled = false;
-          tampilkanToast('Error AI: ' + err.message);
+          aturStatusProsesAI(false);
+          tampilkanToast('Error AI: ' + (err && err.message ? err.message : 'Koneksi gagal'));
         })
         .prosesTransaksi(teks, 'Web App AI', imageData);
     }
