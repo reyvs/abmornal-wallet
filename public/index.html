@@ -107,35 +107,16 @@
       align-items: center;
       justify-content: flex-end;
       padding: 0;
-      pointer-events: auto;
-    }
-    .chat-ai-pill-glow {
-      background: linear-gradient(135deg, #B5F83A 0%, #D8FF70 100%);
-      box-shadow: 0 8px 24px -2px rgba(181, 248, 58, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
     }
     .wallet-card-spring {
-      transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, box-shadow 0.28s ease;
-      will-change: transform, opacity;
+      transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s ease;
     }
     .wallet-card-dragging {
       transition: none !important;
-      cursor: grabbing !important;
     }
-    .wallet-shimmer {
-      position: relative;
-      overflow: hidden;
-    }
-    .wallet-shimmer::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%);
-      transform: translateX(-100%);
-      transition: transform 0.75s ease;
-      pointer-events: none;
-    }
-    .wallet-shimmer:hover::after {
-      transform: translateX(100%);
+    .chat-ai-pill-glow {
+      background: linear-gradient(135deg, #B5F83A 0%, #9EE61E 100%);
+      box-shadow: 0 0 22px rgba(181, 248, 58, 0.48), 0 6px 16px rgba(0, 0, 0, 0.45);
     }
     /* iOS Home Screen / PWA: hindari konten tertutup status bar & home indicator. */
     html {
@@ -1337,6 +1318,10 @@
   <!-- Cloudflare adapter: replaces google.script.run with an async API bridge. -->
   <script>
   (function () {
+    const isSandboxPreview = (window.location.protocol === 'about:' || window.location.protocol === 'blob:');
+    if (isSandboxPreview) return;
+    if (window.google && window.google.script && window.google.script.run) return;
+
     function makeRunner(success, failure) {
       return new Proxy({}, {
         get(_target, prop) {
@@ -1360,7 +1345,10 @@
               .then(result => { if (typeof success === 'function') success(result); })
               .catch(err => {
                 if (typeof failure === 'function') failure(err);
-                else { console.error('API request failed:', err); if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + err.message); }
+                else {
+                  console.error('API request failed:', err);
+                  if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + err.message);
+                }
               });
           };
         }
@@ -1455,20 +1443,23 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       try {
-        appState.isNominalHidden = localStorage.getItem('keuangan_hide_nominal') === '1';
-        const savedObj = localStorage.getItem('keuangan_checked_obj');
-        if (savedObj) appState.checkedObjectives = JSON.parse(savedObj);
-      } catch (e) {}
+        // Mulai dari bagian atas saat Home Screen app dibuka.
+        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+        const scrollArea = document.getElementById('appScrollArea');
+        if (scrollArea) scrollArea.scrollTop = 0;
 
-      // Mulai dari bagian atas saat Home Screen app dibuka.
-      if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-      const scrollArea = document.getElementById('appScrollArea');
-      if (scrollArea) scrollArea.scrollTop = 0;
-      perbaruiIkonPrivasi();
-      setupSwipeGesture();
-      // Tunggu layout PWA iOS stabil sebelum pengambilan data pertama.
-      setTimeout(() => muatDataDashboard(false), 300);
-      refreshIcons();
+        try {
+          appState.isNominalHidden = (localStorage.getItem('keuangan_hide_nominal') === '1');
+        } catch (storageErr) {}
+
+        perbaruiIkonPrivasi();
+        setupSwipeGesture();
+        // Tunggu layout PWA iOS stabil sebelum pengambilan data pertama.
+        setTimeout(() => muatDataDashboard(false), 300);
+        refreshIcons();
+      } catch (initErr) {
+        console.error('Initialization error:', initErr);
+      }
     });
 
     // ========================================================================
@@ -2419,10 +2410,23 @@
       }
 
       const btn = document.getElementById('btnKirimAi');
-      if (btn) btn.disabled = true;
+      const btnHtmlAsli = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Memproses AI...</span>`;
+        refreshIcons();
+      }
+
+      const pulihkanTombol = () => {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = btnHtmlAsli;
+          refreshIcons();
+        }
+      };
 
       const selesai = (res) => {
-        if (btn) btn.disabled = false;
+        pulihkanTombol();
         if (!res || !res.success) {
           tampilkanToast(res && res.message ? res.message : 'Gagal memproses AI');
           return;
@@ -2470,7 +2474,7 @@
       google.script.run
         .withSuccessHandler(selesai)
         .withFailureHandler((err) => {
-          if (btn) btn.disabled = false;
+          pulihkanTombol();
           tampilkanToast('Error AI: ' + err.message);
         })
         .prosesTransaksi(teks, 'Web App AI', imageData);
