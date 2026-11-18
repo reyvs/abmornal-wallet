@@ -151,7 +151,7 @@
     }
     #appScrollArea {
       box-sizing: border-box;
-      height: 100vh;
+      height: 100vh; /* fallback untuk browser lama */
       height: 100dvh;
       padding-top: env(safe-area-inset-top, 0px);
       padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
@@ -160,9 +160,11 @@
       overscroll-behavior-y: contain;
       -webkit-overflow-scrolling: touch;
     }
+    /* Navigation tetap di atas home indicator dengan ruang yang konsisten. */
     #bottomAppNav {
       bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     }
+    /* Background diperpanjang ke safe area di semua sisi. */
     body::before {
       content: '';
       position: fixed;
@@ -180,7 +182,7 @@
 <body class="bg-obsidian-gradient overflow-hidden select-none">
 
   <!-- SVG ClipPath Responsif untuk Lekukan Cutout Asli pada Kartu Wallet -->
-  <svg class="fixed -top-10 -left-10 w-1 h-1 opacity-0 pointer-events-none" aria-hidden="true">
+  <svg width="0" height="0" class="absolute pointer-events-none" aria-hidden="true">
     <defs>
       <clipPath id="walletCutoutClip" clipPathUnits="objectBoundingBox">
         <path d="M 0.072,0 L 0.928,0 Q 1,0 1,0.16 L 1,0.585 Q 1,0.722 0.935,0.722 L 0.642,0.722 Q 0.582,0.722 0.582,0.861 Q 0.582,1 0.518,1 L 0.072,1 Q 0,1 0,0.84 L 0,0.16 Q 0,0 0.072,0 Z" />
@@ -216,7 +218,7 @@
     </div>
 
     <!-- ====================================================================
-         SUB-TAB 1: DOMPET, SALDO GABUNGAN & STACKED CARD + LIMIT NOTCH
+         SUB-TAB 1: DOMPET, SALDO GABUNGAN & STACKED CARD + ADD CARD NOTCH
          ==================================================================== -->
     <div id="homeSubPanelDompet" class="space-y-4">
       <!-- Header Ringkas Total Saldo Gabungan -->
@@ -256,7 +258,7 @@
         </div>
       </header>
 
-      <!-- Kartu Stack Dompet Interaktif dengan Cutout Notch Mini Progress Bar Limit -->
+      <!-- Kartu Stack Dompet Interaktif dengan Cutout Notch Mini Progress Bar Limit (Reference 1) -->
       <section aria-label="Kartu Wallet" class="space-y-2.5 pt-1">
         <div class="flex items-center justify-between px-1">
           <div class="flex items-center gap-2">
@@ -575,7 +577,7 @@
         </div>
       </div>
 
-      <!-- Panel Filter Akordeon -->
+      <!-- Panel Filter Akordeon (Tersembunyi default agar halaman utama lega) -->
       <div id="filterAkordeonBody" class="hidden space-y-2.5 pt-2 border-t border-white/[0.07]">
         <div class="grid grid-cols-2 gap-2">
           <select id="filterWaktu" onchange="renderDaftarTransaksi()"
@@ -1329,24 +1331,12 @@
   </div>
 
   <!-- ======================================================================
-       JAVASCRIPT LOGIC (CLOUDFLARE PAGES /API BRIDGE + SANDBOX PREVIEW)
+       JAVASCRIPT LOGIC (GAS + SANDBOX PREVIEW COMPATIBLE)
        ====================================================================== -->
+
+  <!-- Cloudflare adapter: replaces google.script.run with an async API bridge. -->
   <script>
   (function () {
-    if (window.google && window.google.script && window.google.script.run) {
-      window.__isNativeGas = true;
-      return;
-    }
-    window.__isNativeGas = false;
-
-    const isSandboxPreviewOrigin = (
-      window.location.protocol === 'about:' ||
-      window.location.protocol === 'file:' ||
-      window.location.protocol === 'blob:' ||
-      !window.location.origin ||
-      window.location.origin === 'null'
-    );
-
     function makeRunner(success, failure) {
       return new Proxy({}, {
         get(_target, prop) {
@@ -1355,13 +1345,6 @@
           if (prop === 'withUserObject') return () => makeRunner(success, failure);
           if (typeof prop !== 'string' || prop === 'then') return undefined;
           return (...args) => {
-            if (isSandboxPreviewOrigin) {
-              const previewErr = new Error('PREVIEW_NO_API');
-              previewErr.isPreviewNoApi = true;
-              if (typeof failure === 'function') setTimeout(() => failure(previewErr), 60);
-              return;
-            }
-
             fetch('/api', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1369,28 +1352,13 @@
               body: JSON.stringify({ action: prop, args })
             })
               .then(async response => {
-                const rawText = await response.text();
-                let data = null;
-                try { data = JSON.parse(rawText); } catch (e) {}
-
-                const isHtmlFallback = !data && rawText.trim().startsWith('<');
-                if (!data && (response.status === 404 || response.status === 405 || isHtmlFallback)) {
-                  const previewErr = new Error('PREVIEW_NO_API');
-                  previewErr.isPreviewNoApi = true;
-                  throw previewErr;
-                }
-                if (!response.ok) {
-                  const detail = data && data.message ? data.message : ('HTTP ' + response.status + '. Periksa login Cloudflare Access / konfigurasi API.');
-                  throw new Error(detail);
-                }
-                if (!data || !data.success) throw new Error((data && data.message) || 'API error');
+                if (!response.ok) throw new Error('HTTP ' + response.status + '. Periksa login Cloudflare Access / konfigurasi API.');
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || 'API error');
                 return data;
               })
               .then(result => { if (typeof success === 'function') success(result); })
               .catch(err => {
-                if (err instanceof TypeError) {
-                  err.isPreviewNoApi = true;
-                }
                 if (typeof failure === 'function') failure(err);
                 else { console.error('API request failed:', err); if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + err.message); }
               });
@@ -1401,9 +1369,8 @@
     window.google = { script: { run: makeRunner(null, null) } };
   })();
   </script>
-
   <script>
-    let isGasEnvironment = true;
+    const isGasEnvironment = (typeof google !== 'undefined' && google.script && google.script.run);
 
     // State Aplikasi
     let appState = {
@@ -1493,17 +1460,16 @@
         if (savedObj) appState.checkedObjectives = JSON.parse(savedObj);
       } catch (e) {}
 
+      // Mulai dari bagian atas saat Home Screen app dibuka.
       if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
       const scrollArea = document.getElementById('appScrollArea');
       if (scrollArea) scrollArea.scrollTop = 0;
-
       perbaruiIkonPrivasi();
       setupSwipeGesture();
-      setTimeout(() => muatDataDashboard(false), 120);
+      // Tunggu layout PWA iOS stabil sebelum pengambilan data pertama.
+      setTimeout(() => muatDataDashboard(false), 300);
       refreshIcons();
     });
-
-    window.addEventListener('load', refreshIcons);
 
     // ========================================================================
     // 1. NAVIGASI HALAMAN & SUB-TAB
@@ -1634,9 +1600,7 @@
       const terapkanData = (res) => {
         if (btnRef) btnRef.classList.remove('animate-spin');
         if (!res || !res.success) {
-          const msg = res && res.message ? res.message : 'Gagal memuat data';
-          tampilkanToast(msg);
-          tampilkanErrorDaftarTransaksi(msg);
+          tampilkanToast(res && res.message ? res.message : 'Gagal memuat data');
           return;
         }
 
@@ -1668,8 +1632,7 @@
         if (showToast) tampilkanToast('Data keuangan diperbarui!');
       };
 
-      const muatMockPreview = () => {
-        isGasEnvironment = false;
+      if (!isGasEnvironment) {
         const total = mockDatabase.wallets.reduce((acc, w) => acc + (Number(w.saldo) || 0), 0);
         terapkanData({
           success: true,
@@ -1684,10 +1647,6 @@
             estimasiSisaSaldoSetelahTagihan: total - mockDatabase.tagihanRutin.filter(t => t.aktif && !t.sudahTerbayarBulanIni).reduce((a, b) => a + b.nominal, 0)
           }
         });
-      };
-
-      if (!isGasEnvironment) {
-        muatMockPreview();
         return;
       }
 
@@ -1695,30 +1654,9 @@
         .withSuccessHandler(terapkanData)
         .withFailureHandler((err) => {
           if (btnRef) btnRef.classList.remove('animate-spin');
-          if (err && err.isPreviewNoApi) {
-            muatMockPreview();
-            return;
-          }
-          const msg = err && err.message ? err.message : 'Gagal terhubung ke server';
-          tampilkanToast('Error memuat data: ' + msg);
-          tampilkanErrorDaftarTransaksi(msg);
+          tampilkanToast('Error memuat data: ' + err.message);
         })
         .getDashboardData();
-    }
-
-    function tampilkanErrorDaftarTransaksi(pesan) {
-      const listEl = document.getElementById('listTransaksi');
-      if (!listEl) return;
-      listEl.innerHTML = `
-        <div class="rounded-2xl bg-rose-500/10 border border-rose-500/25 p-4 text-center space-y-2.5">
-          <p class="text-xs font-bold text-rose-300">Gagal Memuat Transaksi</p>
-          <p class="text-[11px] text-slate-300 leading-relaxed">${escapeHtml(pesan)}</p>
-          <button type="button" onclick="muatDataDashboard(true)"
-            class="px-4 py-2 rounded-xl bg-[#B5F83A] text-[#16171F] text-xs font-extrabold transition active:scale-95">
-            Coba Muat Ulang
-          </button>
-        </div>
-      `;
     }
 
     function urutkanWalletBcaDepan(list) {
@@ -2481,19 +2419,10 @@
       }
 
       const btn = document.getElementById('btnKirimAi');
-      const origHtml = btn ? btn.innerHTML : '';
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Memproses AI...</span>`;
-        refreshIcons();
-      }
+      if (btn) btn.disabled = true;
 
       const selesai = (res) => {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = origHtml;
-          refreshIcons();
-        }
+        if (btn) btn.disabled = false;
         if (!res || !res.success) {
           tampilkanToast(res && res.message ? res.message : 'Gagal memproses AI');
           return;
@@ -2541,11 +2470,7 @@
       google.script.run
         .withSuccessHandler(selesai)
         .withFailureHandler((err) => {
-          if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = origHtml;
-            refreshIcons();
-          }
+          if (btn) btn.disabled = false;
           tampilkanToast('Error AI: ' + err.message);
         })
         .prosesTransaksi(teks, 'Web App AI', imageData);
@@ -3067,17 +2992,96 @@
     }
 
     // ========================================================================
-    // 11. KALENDER BULANAN (PERFORMA HARIAN & BINTANG MASA DEPAN)
+    // 11. TAB NOTIFIKASI & PERINGATAN LIMIT / TAGIHAN
     // ========================================================================
-    function hitungTargetHarianKalender() {
-      const cfg = appState.limitConfig || {};
-      if (cfg.enabled && Number(cfg.nominal) > 0) {
-        if (cfg.periode === 'harian') return Number(cfg.nominal);
-        if (cfg.periode === 'mingguan') return Math.round(Number(cfg.nominal) / 7);
-        if (cfg.periode === 'bulanan') return Math.round(Number(cfg.nominal) / 30);
+    function renderNotifikasiTab() {
+      const cfg = appState.limitConfig || { enabled: false, periode: 'harian', nominal: 0 };
+      const badgeEl = document.getElementById('notifLimitBadge');
+      const descEl = document.getElementById('notifLimitDesc');
+      const barEl = document.getElementById('notifLimitBarFill');
+      const listEl = document.getElementById('listNotifikasiContainer');
+      const navBadge = document.getElementById('navNotifBadge');
+
+      const alerts = [];
+
+      if (cfg.enabled && cfg.nominal > 0) {
+        const terpakai = hitungPengeluaranPeriodeLimit(cfg.periode);
+        const persen = Math.round((terpakai / cfg.nominal) * 100);
+        if (badgeEl) {
+          badgeEl.textContent = `${persen}% Terpakai`;
+          badgeEl.className = persen >= 100
+            ? 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300'
+            : 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#B5F83A]/20 text-[#B5F83A]';
+        }
+        if (descEl) {
+          descEl.textContent = `Pengeluaran ${cfg.periode}: ${formatNominalPrivasi(terpakai)} dari batas ${formatNominalPrivasi(cfg.nominal)}.`;
+        }
+        if (barEl) {
+          barEl.style.width = `${Math.min(100, persen)}%`;
+          barEl.className = `h-full rounded-full transition-all duration-500 ${persen >= 100 ? 'striped-danger-bar' : 'striped-lime-bar'}`;
+        }
+
+        if (persen >= 80) {
+          alerts.push({
+            tipe: persen >= 100 ? 'danger' : 'warn',
+            judul: persen >= 100 ? `Limit ${cfg.periode} terlampaui (${persen}%)!` : `Mendekati batas limit ${cfg.periode} (${persen}%)`,
+            isi: `Terpakai ${formatNominalPrivasi(terpakai)} dari limit ${formatNominalPrivasi(cfg.nominal)}.`
+          });
+        }
+      } else {
+        if (badgeEl) {
+          badgeEl.textContent = 'Nonaktif';
+          badgeEl.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white/10 text-slate-400';
+        }
+        if (descEl) descEl.textContent = 'Limit pengeluaran belum diaktifkan.';
+        if (barEl) barEl.style.width = '0%';
       }
-      if (appState.proyeksiGajian && Number(appState.proyeksiGajian.batasHarianAman) > 0) {
-        return Number(appState.proyeksiGajian.batasHarianAman);
+
+      (appState.tagihanRutin || []).forEach(tr => {
+        if (tr.aktif && !tr.sudahTerbayarBulanIni && tr.sisaHariJatuhTempo <= 5) {
+          alerts.push({
+            tipe: 'info',
+            judul: `Tagihan "${tr.nama}" jatuh tempo ${tr.sisaHariJatuhTempo} hari lagi`,
+            isi: `Siapkan saldo ${formatNominalPrivasi(tr.nominal)} di ${tr.wallet} sebelum tanggal ${tr.tanggalJatuhTempo}.`
+          });
+        }
+      });
+
+      if (navBadge) {
+        if (alerts.length > 0) {
+          navBadge.textContent = String(alerts.length);
+          navBadge.classList.remove('hidden');
+        } else {
+          navBadge.classList.add('hidden');
+        }
+      }
+
+      if (listEl) {
+        if (alerts.length === 0) {
+          listEl.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Tidak ada peringatan aktif.</p>`;
+        } else {
+          listEl.innerHTML = alerts.map(al => `
+            <div class="p-3 rounded-2xl ${al.tipe === 'danger' ? 'bg-rose-500/10 border-rose-500/25' : 'bg-amber-500/10 border-amber-500/25'} border space-y-1">
+              <p class="text-xs font-bold text-white">${escapeHtml(al.judul)}</p>
+              <p class="text-[11px] text-slate-300">${escapeHtml(al.isi)}</p>
+            </div>
+          `).join('');
+        }
+      }
+    }
+
+    // ========================================================================
+    // 12C. KALENDER BULANAN (LINGKARAN PERFORMA HARIAN & BINTANG MASA DEPAN)
+    // ========================================================================
+    function getTargetHarianKalender() {
+      const cfg = appState.limitConfig || { enabled: false, periode: 'harian', nominal: 0 };
+      if (cfg.enabled && cfg.nominal > 0) {
+        if (cfg.periode === 'harian') return cfg.nominal;
+        if (cfg.periode === 'mingguan') return Math.round(cfg.nominal / 7);
+        if (cfg.periode === 'bulanan') return Math.round(cfg.nominal / 30);
+      }
+      if (appState.proyeksiGajian && appState.proyeksiGajian.batasHarianAman > 0) {
+        return appState.proyeksiGajian.batasHarianAman;
       }
       return 150000;
     }
@@ -3104,8 +3108,8 @@
       renderKalenderBulanan();
     }
 
-    function pilihTanggalKalender(day) {
-      appState.kalenderSelectedDay = Number(day);
+    function pilihTanggalKalender(dayNum) {
+      appState.kalenderSelectedDay = dayNum;
       renderKalenderBulanan();
     }
 
@@ -3118,279 +3122,212 @@
       const namaBulanID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
       const year = appState.kalenderYear;
       const month = appState.kalenderMonth;
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
 
       if (titleEl) titleEl.textContent = namaBulanID[month];
-      if (subEl) subEl.textContent = `${year} • Ketuk tanggal untuk detail & analisa`;
+      if (subEl) subEl.textContent = `${year} • Ketuk tanggal untuk target & analisa`;
 
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const firstDayJs = new Date(year, month, 1).getDay();
-      const startOffset = firstDayJs === 0 ? 6 : firstDayJs - 1;
+      const targetHarian = getTargetHarianKalender();
 
-      const targetHarian = hitungTargetHarianKalender();
-
+      // Kelompokkan transaksi per tanggal di bulan terpilih
       const trxPerTanggal = {};
-      const keluarPerTanggal = {};
-      (appState.transaksi || []).forEach(t => {
+      appState.transaksi.forEach(t => {
         const ts = Number(t.timestamp) || 0;
         if (!ts) return;
         const d = new Date(ts);
         if (d.getFullYear() === year && d.getMonth() === month) {
-          const dayNum = d.getDate();
-          if (!trxPerTanggal[dayNum]) trxPerTanggal[dayNum] = [];
-          trxPerTanggal[dayNum].push(t);
-
-          const meta = klasifikasiTransaksi(t);
-          if (meta.subTipe === 'Pengeluaran') {
-            keluarPerTanggal[dayNum] = (keluarPerTanggal[dayNum] || 0) + (Number(t.nominal) || 0);
-          }
+          const day = d.getDate();
+          if (!trxPerTanggal[day]) trxPerTanggal[day] = [];
+          trxPerTanggal[day].push(t);
         }
       });
 
-      const headerHari = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-      let html = headerHari.map(h => `
-        <div class="text-center text-[10px] font-bold uppercase text-slate-500 pb-1">${h}</div>
-      `).join('');
-
-      for (let empty = 0; empty < startOffset; empty++) {
-        html += `<div class="aspect-square"></div>`;
-      }
-
+      let html = '';
       for (let day = 1; day <= daysInMonth; day++) {
         const cellDateStart = new Date(year, month, day).getTime();
         const isFuture = cellDateStart > todayStart;
         const isSelected = (Number(appState.kalenderSelectedDay) === day);
-        const keluarHari = keluarPerTanggal[day] || 0;
 
         if (isFuture) {
-          const ringCls = isSelected ? 'ring-2 ring-[#B5F83A] rounded-full bg-white/[0.04]' : '';
+          // Tanggal yang belum dilewati -> Bintang 8-sudut seperti referensi
           html += `
-            <button type="button" onclick="pilihTanggalKalender(${day})" title="${day} ${namaBulanID[month]} (Mendatang)"
-              class="aspect-square flex flex-col items-center justify-center relative group transition active:scale-90 ${ringCls}">
-              <svg viewBox="0 0 24 24" class="w-7 h-7 text-[#2B2D3E] group-hover:text-slate-600 transition" fill="currentColor">
-                <path d="M12 1L14.2 8.5L21 6L15.5 11.2L23 12L15.5 12.8L21 18L14.2 15.5L12 23L9.8 15.5L3 18L8.5 12.8L1 12L8.5 11.2L3 6L9.8 8.5Z"/>
+            <button type="button" onclick="pilihTanggalKalender(${day})" title="${day} ${namaBulanID[month]} (Belum dilewati)"
+              class="aspect-square flex items-center justify-center rounded-full transition transform active:scale-90 ${isSelected ? 'ring-2 ring-[#B5F83A]/70 bg-white/[0.04]' : 'hover:bg-white/[0.03]'}">
+              <svg viewBox="0 0 24 24" class="w-9 h-9 ${isSelected ? 'text-[#B5F83A]/70' : 'text-[#282A3B]'}" fill="currentColor">
+                <path d="M12 0.5L14.1 8.8L21.5 4.5L15.2 11.4L23.5 12L15.2 12.6L21.5 19.5L14.1 15.2L12 23.5L9.9 15.2L2.5 19.5L8.8 12.6L0.5 12L8.8 11.4L2.5 4.5L9.9 8.8Z"/>
               </svg>
-              <span class="absolute text-[9px] font-bold text-slate-400">${day}</span>
             </button>
           `;
-        } else {
-          let circleCls = 'bg-[#B5F83A] text-[#16171F] font-extrabold';
-          if (keluarHari > targetHarian) {
-            circleCls = 'bg-[#1C1D29] border border-rose-500/45 text-rose-300 font-bold';
-          } else if (keluarHari > targetHarian * 0.5) {
-            circleCls = 'bg-[#3A3D52] text-white font-bold';
-          }
-
-          const selectedRing = isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-[#16171F] scale-105' : 'hover:scale-105';
-          html += `
-            <button type="button" onclick="pilihTanggalKalender(${day})"
-              class="aspect-square flex items-center justify-center">
-              <span class="w-9 h-9 rounded-full flex items-center justify-center text-xs transition ${circleCls} ${selectedRing}">
-                ${day}
-              </span>
-            </button>
-          `;
+          continue;
         }
+
+        // Hitung pengeluaran non-transfer hari tersebut
+        const listHari = trxPerTanggal[day] || [];
+        let keluarHari = 0;
+        listHari.forEach(t => {
+          const meta = klasifikasiTransaksi(t);
+          if (meta.subTipe === 'Pengeluaran') keluarHari += Number(t.nominal) || 0;
+        });
+
+        // Hitung skor kualitas pengeluaran (0 = sangat boros / gelap, 1 = sangat hemat / hijau lime cerah)
+        const rasio = targetHarian > 0 ? (keluarHari / targetHarian) : (keluarHari === 0 ? 0 : 1.5);
+        let bgStyle = '';
+        let textStyle = '';
+
+        if (rasio <= 0.45) {
+          // Sangat bagus -> Hijau Lime menyala (#B5F83A)
+          bgStyle = 'background-color: #B5F83A; box-shadow: 0 0 16px rgba(181, 248, 58, 0.35);';
+          textStyle = 'color: #2B3B0B; font-weight: 800;';
+        } else if (rasio <= 0.75) {
+          // Bagus -> Ungu-abu terang (#4B4E6D)
+          bgStyle = 'background-color: #484B6A;';
+          textStyle = 'color: #B8BCD6; font-weight: 700;';
+        } else if (rasio <= 1.0) {
+          // Mendekati batas -> Abu gelap (#2C2E42)
+          bgStyle = 'background-color: #2A2C3F;';
+          textStyle = 'color: #6B6F8D; font-weight: 700;';
+        } else if (rasio <= 1.35) {
+          // Melewati batas -> Sangat redup (#202230)
+          bgStyle = 'background-color: #202230;';
+          textStyle = 'color: #3E4157; font-weight: 700;';
+        } else {
+          // Sangat boros -> Hampir menyatu dengan background (#1A1B26)
+          bgStyle = 'background-color: #1A1B26;';
+          textStyle = 'color: #282A3A; font-weight: 700;';
+        }
+
+        html += `
+          <button type="button" onclick="pilihTanggalKalender(${day})"
+            style="${bgStyle} ${textStyle}"
+            class="aspect-square rounded-full flex items-center justify-center text-xs font-mono-num transition-all active:scale-90 ${isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-[#16171F] scale-105' : 'hover:brightness-110'}">
+            ${day}
+          </button>
+        `;
       }
 
       gridEl.innerHTML = html;
+      renderDetailTanggalKalender(appState.kalenderSelectedDay, trxPerTanggal[appState.kalenderSelectedDay] || [], targetHarian, todayStart);
+    }
 
-      // Render panel detail tanggal terpilih
-      const selectedDay = Math.min(daysInMonth, Math.max(1, Number(appState.kalenderSelectedDay) || 1));
-      const selDateObj = new Date(year, month, selectedDay);
-      const isFutureSelected = selDateObj.getTime() > todayStart;
-      const namaHariLengkap = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    function renderDetailTanggalKalender(day, listHari, targetHarian, todayStart) {
+      const year = appState.kalenderYear;
+      const month = appState.kalenderMonth;
+      const namaBulanID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+      const namaHariID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
-      const lblTanggal = document.getElementById('kalDetailTanggalLabel');
-      const lblSub = document.getElementById('kalDetailSubLabel');
+      const dateObj = new Date(year, month, day);
+      const isFuture = dateObj.getTime() > todayStart;
+
+      const labelEl = document.getElementById('kalDetailTanggalLabel');
+      const subLabelEl = document.getElementById('kalDetailSubLabel');
       const badgeEl = document.getElementById('kalDetailScoreBadge');
       const targetEl = document.getElementById('kalDetailTarget');
       const aktualEl = document.getElementById('kalDetailAktual');
       const analisaEl = document.getElementById('kalDetailAnalisaText');
-      const listTrxEl = document.getElementById('kalDetailTrxList');
+      const listEl = document.getElementById('kalDetailTrxList');
 
-      if (lblTanggal) {
-        lblTanggal.textContent = `${namaHariLengkap[selDateObj.getDay()]}, ${selectedDay} ${namaBulanID[month]} ${year}`;
-      }
+      if (labelEl) labelEl.textContent = `${namaHariID[dateObj.getDay()]}, ${day} ${namaBulanID[month]} ${year}`;
       if (targetEl) targetEl.textContent = formatNominalPrivasi(targetHarian);
 
-      if (isFutureSelected) {
-        const tagihanPadaTgl = (appState.tagihanRutin || []).filter(t => t.aktif && Number(t.tanggalJatuhTempo) === selectedDay);
-        const estimasiKeluar = tagihanPadaTgl.reduce((acc, t) => acc + (Number(t.nominal) || 0), 0);
-
-        if (lblSub) lblSub.textContent = 'Tanggal mendatang • Proyeksi jadwal tagihan';
+      if (isFuture) {
+        if (subLabelEl) subLabelEl.textContent = 'Tanggal belum dilewati (Target mendatang)';
         if (badgeEl) {
-          badgeEl.textContent = 'Mendatang';
+          badgeEl.textContent = '✦ Mendatang';
           badgeEl.className = 'text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 shrink-0';
         }
-        if (aktualEl) aktualEl.textContent = formatNominalPrivasi(estimasiKeluar);
+        if (aktualEl) aktualEl.textContent = 'Rp 0';
         if (analisaEl) {
-          analisaEl.textContent = tagihanPadaTgl.length > 0
-            ? `Terdapat ${tagihanPadaTgl.length} tagihan rutin jatuh tempo pada tanggal ${selectedDay} sebesar ${formatNominalPrivasi(estimasiKeluar)}. Pastikan saldo dompet pembayar mencukupi.`
-            : `Belum ada tagihan rutin terjadwal pada tanggal ${selectedDay}. Jaga pengeluaran di bawah ${formatNominalPrivasi(targetHarian)} agar arus kas tetap sehat.`;
+          analisaEl.textContent = `Tanggal ini belum dilewati. Jaga pengeluaran Anda tetap di bawah ${formatNominalPrivasi(targetHarian)} agar lingkaran tanggal ini menyala hijau cerah!`;
         }
-        if (listTrxEl) {
-          listTrxEl.innerHTML = tagihanPadaTgl.length === 0
-            ? `<p class="text-xs text-slate-500 text-center py-4">Tidak ada jadwal tagihan rutin pada tanggal ini.</p>`
-            : tagihanPadaTgl.map(tr => `
-                <div class="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <div>
-                    <p class="text-xs font-bold text-white">${escapeHtml(tr.nama)}</p>
-                    <p class="text-[10px] text-slate-400">Tagihan Rutin • ${escapeHtml(tr.wallet)}</p>
-                  </div>
-                  <span class="font-mono-num text-xs font-bold text-amber-300">${formatNominalPrivasi(tr.nominal)}</span>
-                </div>
-              `).join('');
+        if (listEl) {
+          listEl.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">Belum ada transaksi karena tanggal belum dilewati.</p>`;
         }
-      } else {
-        const listHari = trxPerTanggal[selectedDay] || [];
-        const totalKeluarHari = keluarPerTanggal[selectedDay] || 0;
-
-        if (lblSub) lblSub.textContent = `${listHari.length} transaksi tercatat`;
-        if (aktualEl) aktualEl.textContent = formatNominalPrivasi(totalKeluarHari);
-
-        if (badgeEl && analisaEl) {
-          if (totalKeluarHari === 0) {
-            badgeEl.textContent = 'Zero Spend';
-            badgeEl.className = 'text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-[#B5F83A]/20 text-[#B5F83A] shrink-0';
-            analisaEl.textContent = 'Luar biasa! Tidak ada pengeluaran tercatat pada hari ini (No-Spend Day), sangat membantu memperbesar tabungan bulanan.';
-          } else if (totalKeluarHari <= targetHarian * 0.5) {
-            badgeEl.textContent = 'Sangat Hemat';
-            badgeEl.className = 'text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-[#B5F83A]/20 text-[#B5F83A] shrink-0';
-            analisaEl.textContent = `Pengeluaran hari ini hanya ${Math.round((totalKeluarHari / targetHarian) * 100)}% dari batas harian (${formatNominalPrivasi(targetHarian)}). Pertahankan disiplin ini!`;
-          } else if (totalKeluarHari <= targetHarian) {
-            badgeEl.textContent = 'Cukup Terkendali';
-            badgeEl.className = 'text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/15 text-slate-200 shrink-0';
-            analisaEl.textContent = `Pengeluaran masih berada dalam batas aman harian (${formatNominalPrivasi(targetHarian)}), tersisa ruang ${formatNominalPrivasi(targetHarian - totalKeluarHari)}.`;
-          } else {
-            badgeEl.textContent = 'Over Target';
-            badgeEl.className = 'text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 shrink-0';
-            analisaEl.textContent = `Pengeluaran melampaui batas harian sebesar ${formatNominalPrivasi(totalKeluarHari - targetHarian)}. Kurangi jajan non-esensial di hari berikutnya untuk menyeimbangkan anggaran.`;
-          }
-        }
-
-        if (listTrxEl) {
-          listTrxEl.innerHTML = listHari.length === 0
-            ? `<p class="text-xs text-slate-500 text-center py-4">Tidak ada transaksi tercatat pada tanggal ini.</p>`
-            : listHari.map(t => {
-                const meta = klasifikasiTransaksi(t);
-                return `
-                  <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <div class="min-w-0">
-                      <p class="text-xs font-semibold text-slate-100 truncate">${escapeHtml(t.keterangan)}</p>
-                      <p class="text-[10px] text-slate-400">${escapeHtml(t.wallet)} • ${escapeHtml(t.kategori)}</p>
-                    </div>
-                    <span class="font-mono-num text-xs font-bold shrink-0 ${meta.amountClass}">
-                      ${meta.prefix}${formatNominalPrivasi(t.nominal)}
-                    </span>
-                  </div>
-                `;
-              }).join('');
-        }
-      }
-    }
-
-    // ========================================================================
-    // 12. TAB NOTIFIKASI & MONITORING LIMIT PENGELUARAN
-    // ========================================================================
-    function renderNotifikasiTab() {
-      const cfg = appState.limitConfig || { enabled: false, periode: 'harian', nominal: 0 };
-      const badgeEl = document.getElementById('notifLimitBadge');
-      const descEl = document.getElementById('notifLimitDesc');
-      const barEl = document.getElementById('notifLimitBarFill');
-      const listEl = document.getElementById('listNotifikasiContainer');
-      const navBadgeEl = document.getElementById('navNotifBadge');
-
-      const alerts = [];
-
-      if (cfg.enabled && Number(cfg.nominal) > 0) {
-        const terpakai = hitungPengeluaranPeriodeLimit(cfg.periode);
-        const persen = Math.round((terpakai / cfg.nominal) * 100);
-        const widthPct = Math.min(100, Math.max(0, persen));
-
-        if (badgeEl) {
-          badgeEl.textContent = `${persen}% Terpakai`;
-          badgeEl.className = persen >= 100
-            ? 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300'
-            : (persen >= 75
-              ? 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300'
-              : 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#B5F83A]/20 text-[#B5F83A]');
-        }
-        if (descEl) {
-          descEl.textContent = `Terpakai ${formatNominalPrivasi(terpakai)} dari batas ${cfg.periode} ${formatNominalPrivasi(cfg.nominal)}.`;
-        }
-        if (barEl) {
-          barEl.style.width = `${widthPct}%`;
-          barEl.className = `h-full rounded-full transition-all duration-500 ${
-            persen >= 100 ? 'striped-danger-bar' : (persen >= 75 ? 'striped-purple-bar' : 'striped-lime-bar')
-          }`;
-        }
-
-        if (persen >= 100) {
-          alerts.push({
-            level: 'danger',
-            title: `Batas Pengeluaran ${cfg.periode.toUpperCase()} Terlampaui (${persen}%)`,
-            desc: `Pengeluaran telah mencapai ${formatNominalPrivasi(terpakai)} melebihi limit ${formatNominalPrivasi(cfg.nominal)}.`
-          });
-        } else if (persen >= 75) {
-          alerts.push({
-            level: 'warning',
-            title: `Mendekati Limit Pengeluaran ${cfg.periode.toUpperCase()} (${persen}%)`,
-            desc: `Sisa kuota pengeluaran ${cfg.periode} tinggal ${formatNominalPrivasi(Math.max(0, cfg.nominal - terpakai))}.`
-          });
-        }
-      } else {
-        if (badgeEl) {
-          badgeEl.textContent = 'Nonaktif';
-          badgeEl.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white/10 text-slate-400';
-        }
-        if (descEl) descEl.textContent = 'Limit pengeluaran belum diaktifkan.';
-        if (barEl) barEl.style.width = '0%';
+        return;
       }
 
-      (appState.tagihanRutin || []).forEach(tr => {
-        if (tr.aktif && !tr.sudahTerbayarBulanIni && Number(tr.sisaHariJatuhTempo) <= 7) {
-          alerts.push({
-            level: 'warning',
-            title: `Tagihan "${tr.nama}" Jatuh Tempo ${tr.sisaHariJatuhTempo <= 0 ? 'Hari Ini' : tr.sisaHariJatuhTempo + ' Hari Lagi'}`,
-            desc: `Nominal ${formatNominalPrivasi(tr.nominal)} akan otomatis didebit dari dompet ${tr.wallet} pada tanggal ${tr.tanggalJatuhTempo}.`
-          });
+      let keluarHari = 0;
+      let masukHari = 0;
+      let topPos = null;
+
+      listHari.forEach(t => {
+        const meta = klasifikasiTransaksi(t);
+        const nom = Number(t.nominal) || 0;
+        if (meta.subTipe === 'Pengeluaran') {
+          keluarHari += nom;
+          if (!topPos || nom > topPos.nominal) topPos = t;
+        } else if (meta.subTipe === 'Pemasukan') {
+          masukHari += nom;
         }
       });
 
-      if (appState.proyeksiGajian && appState.proyeksiGajian.estimasiSisaSaldoSetelahTagihan < 0) {
-        alerts.push({
-          level: 'danger',
-          title: 'Peringatan Defisit Tagihan Rutin',
-          desc: `Total saldo saat ini belum mencukupi untuk menutup seluruh tagihan rutin sebelum tanggal gajian berikutnya.`
-        });
+      if (aktualEl) aktualEl.textContent = formatNominalPrivasi(keluarHari);
+      if (subLabelEl) {
+        subLabelEl.textContent = listHari.length > 0
+          ? `${listHari.length} transaksi tercatat pada tanggal ini`
+          : 'Tidak ada pengeluaran tercatat (No-Spend Day)';
       }
 
-      if (navBadgeEl) {
-        if (alerts.length > 0) {
-          navBadgeEl.textContent = String(alerts.length);
-          navBadgeEl.classList.remove('hidden');
-        } else {
-          navBadgeEl.classList.add('hidden');
+      const rasio = targetHarian > 0 ? (keluarHari / targetHarian) : (keluarHari === 0 ? 0 : 1.5);
+      const selisihTarget = targetHarian - keluarHari;
+
+      if (rasio <= 0.45) {
+        if (badgeEl) {
+          badgeEl.textContent = 'Sangat Bagus';
+          badgeEl.className = 'text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-[#B5F83A]/20 text-[#B5F83A] shrink-0';
+        }
+        if (analisaEl) {
+          analisaEl.textContent = keluarHari === 0
+            ? `Luar biasa! Hari tanpa pengeluaran (No-Spend Day). Anda menghemat penuh ${formatNominalPrivasi(targetHarian)} dari target harian.`
+            : `Performa sangat bagus! Pengeluaran hanya ${Math.round(rasio * 100)}% dari batas harian, sehingga menyisakan surplus hemat ${formatNominalPrivasi(selisihTarget)}.`;
+        }
+      } else if (rasio <= 1.0) {
+        if (badgeEl) {
+          badgeEl.textContent = 'Cukup Terkendali';
+          badgeEl.className = 'text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-indigo-500/20 text-indigo-300 shrink-0';
+        }
+        if (analisaEl) {
+          const posInfo = topPos ? ` Pos terbesar: ${escapeHtml(topPos.keterangan)} (${formatNominalPrivasi(topPos.nominal)}).` : '';
+          analisaEl.textContent = `Masih aman di dalam target harian (${Math.round(rasio * 100)}% terpakai), sisa ruang ${formatNominalPrivasi(selisihTarget)}.${posInfo}`;
+        }
+      } else {
+        if (badgeEl) {
+          badgeEl.textContent = 'Over Target';
+          badgeEl.className = 'text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 shrink-0';
+        }
+        if (analisaEl) {
+          const posInfo = topPos ? ` Pemicu utama: ${escapeHtml(topPos.keterangan)} (${escapeHtml(topPos.kategori)}) sebesar ${formatNominalPrivasi(topPos.nominal)}.` : '';
+          analisaEl.textContent = `Kurang baik karena pengeluaran melebihi target harian sebesar ${formatNominalPrivasi(Math.abs(selisihTarget))} (${Math.round(rasio * 100)}%).${posInfo}`;
         }
       }
 
       if (listEl) {
-        if (alerts.length === 0) {
-          listEl.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Tidak ada peringatan aktif. Keuanganmu terpantau aman!</p>`;
+        if (listHari.length === 0) {
+          listEl.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">Tidak ada transaksi pada tanggal ini.</p>`;
         } else {
-          listEl.innerHTML = alerts.map(a => {
-            const isDanger = a.level === 'danger';
+          listEl.innerHTML = listHari.map(t => {
+            const meta = klasifikasiTransaksi(t);
             return `
-              <div class="p-3 rounded-2xl ${isDanger ? 'bg-rose-500/10 border-rose-500/30' : 'bg-amber-500/10 border-amber-500/30'} border space-y-1">
-                <p class="text-xs font-bold ${isDanger ? 'text-rose-300' : 'text-amber-300'}">${escapeHtml(a.title)}</p>
-                <p class="text-[11px] text-slate-300 leading-relaxed">${escapeHtml(a.desc)}</p>
+              <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                <div class="flex items-center gap-2 min-w-0">
+                  <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${meta.iconBgClass}">
+                    <i data-lucide="${meta.icon}" class="w-3.5 h-3.5"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-xs font-semibold text-slate-100 truncate">${escapeHtml(t.keterangan)}</p>
+                    <p class="text-[10px] text-slate-400 truncate">${escapeHtml(t.wallet)} • ${escapeHtml(t.kategori)}</p>
+                  </div>
+                </div>
+                <span class="font-mono-num text-xs font-bold shrink-0 ${meta.amountClass}">
+                  ${meta.prefix}${formatNominalPrivasi(t.nominal)}
+                </span>
               </div>
             `;
           }).join('');
         }
       }
+      refreshIcons();
     }
 
     // ========================================================================
