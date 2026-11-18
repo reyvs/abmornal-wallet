@@ -327,6 +327,15 @@
     .ai-busy-note.is-visible { display: flex; }
     .ai-busy-dot { width: 7px; height: 7px; border-radius: 50%; background: #B5F83A; box-shadow: 0 0 0 4px rgba(181,248,58,.1); animation: startup-text-breathe 1.05s ease-in-out infinite; flex: 0 0 auto; }
     #btnKirimAi:disabled { opacity: .78; cursor: progress; filter: saturate(.8); }
+    /* Clear state while financial mutations are in flight. */
+    #btnKirimTransfer:disabled, #btnHapusTrx:disabled, #btnSimpanEditTrx:disabled {
+      cursor: progress;
+      opacity: .75;
+      filter: saturate(.8);
+    }
+    .action-btn-pending { pointer-events: none; }
+    .action-btn-pending i { flex-shrink: 0; }
+
     @media (prefers-reduced-motion: reduce) {
       .startup-heading, .ai-busy-dot { animation: none !important; }
       .startup-screen { transition-duration: .1s; }
@@ -2114,6 +2123,31 @@
       const totalCards = wallets.length;
       let cardsHtml = '';
 
+      // Event delegation menjaga tap tetap bekerja setelah kartu berganti.
+      // Pada iOS, merender ulang elemen tepat saat touchend bisa membatalkan click.
+      if (!container.dataset.walletClickBound) {
+        container.addEventListener('click', (event) => {
+          if (Date.now() < suppressWalletTapUntil) return;
+          const card = event.target.closest('[data-wallet-idx]');
+          if (!card || !container.contains(card)) return;
+          const idx = Number(card.dataset.walletIdx);
+          if (!Number.isInteger(idx) || !appState.wallets[idx]) return;
+          if (card.dataset.offset === '0') bukaDetailWallet(appState.wallets[idx].nama);
+          else pilihWalletIndex(idx);
+        });
+        container.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          const card = event.target.closest('[data-wallet-idx]');
+          if (!card || !container.contains(card)) return;
+          event.preventDefault();
+          const idx = Number(card.dataset.walletIdx);
+          if (!Number.isInteger(idx) || !appState.wallets[idx]) return;
+          if (card.dataset.offset === '0') bukaDetailWallet(appState.wallets[idx].nama);
+          else pilihWalletIndex(idx);
+        });
+        container.dataset.walletClickBound = '1';
+      }
+
       for (let offset = Math.min(2, totalCards - 1); offset >= 0; offset--) {
         const idx = (activeIdx + offset) % totalCards;
         const w = wallets[idx];
@@ -2125,8 +2159,8 @@
         const opacity = offset === 0 ? 1 : (offset === 1 ? 0.92 : 0.65);
 
         cardsHtml += `
-          <div data-wallet-idx="${idx}" data-offset="${offset}"
-            onclick="${isFront ? `bukaDetailWallet('${escapeAttr(w.nama)}')` : `pilihWalletIndex(${idx})`}"
+          <div data-wallet-idx="${idx}" data-offset="${offset}" role="button" tabindex="0"
+            aria-label="${isFront ? 'Lihat detail dompet ' : 'Pilih dompet '}${escapeHtml(w.nama)}"
             style="background: ${theme.bg}; color: ${theme.text}; transform: translateY(${translateY}px) scale(${scale}); z-index: ${zIndex}; opacity: ${opacity};"
             class="wallet-card-spring wallet-card-cutout wallet-shimmer absolute inset-0 rounded-[26px] p-5 flex flex-col justify-between cursor-pointer shadow-2xl">
             <div class="flex items-center justify-between gap-2">
@@ -2183,26 +2217,39 @@
       renderWalletStack();
     }
 
+    // Hindari synthetic click tepat setelah gesture swipe, tanpa membatalkan tap biasa.
+    let suppressWalletTapUntil = 0;
     function setupSwipeGesture() {
       const area = document.getElementById('walletStackArea');
       if (!area) return;
 
       let startX = 0;
+      let startY = 0;
       let currentX = 0;
+      let tracking = false;
       let dragging = false;
 
-      const onStart = (clientX) => {
+      const onStart = (clientX, clientY) => {
         if (appState.wallets.length <= 1) return;
         startX = clientX;
+        startY = clientY;
         currentX = 0;
-        dragging = true;
-        const frontCard = area.querySelector('[data-offset="0"]');
-        if (frontCard) frontCard.classList.add('wallet-card-dragging');
+        tracking = true;
+        dragging = false;
       };
 
-      const onMove = (clientX) => {
+      const onMove = (clientX, clientY) => {
+        if (!tracking) return;
+        const dx = clientX - startX;
+        const dy = clientY - startY;
+        // Jangan anggap ketukan atau scroll vertikal sebagai gesture swipe.
+        if (!dragging && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+          dragging = true;
+          const frontCard = area.querySelector('[data-offset="0"]');
+          if (frontCard) frontCard.classList.add('wallet-card-dragging');
+        }
         if (!dragging) return;
-        currentX = clientX - startX;
+        currentX = dx;
         const frontCard = area.querySelector('[data-offset="0"]');
         if (frontCard) {
           const rot = Math.max(-10, Math.min(10, currentX * 0.04));
@@ -2211,24 +2258,32 @@
       };
 
       const onEnd = () => {
-        if (!dragging) return;
-        dragging = false;
+        if (!tracking) return;
+        tracking = false;
         const frontCard = area.querySelector('[data-offset="0"]');
-        if (frontCard) frontCard.classList.remove('wallet-card-dragging');
-
-        if (Math.abs(currentX) > 48) {
-          geserWallet(currentX < 0 ? 1 : -1);
-        } else {
-          renderWalletStack();
+        if (frontCard) {
+          frontCard.classList.remove('wallet-card-dragging');
+          // Reset secara smooth tanpa membuat ulang DOM; tap iPhone tetap memicu click.
+          frontCard.style.transform = '';
         }
+        if (dragging) {
+          // Swipe kecil pun jangan membuka detail, karena pengguna sedang menggeser.
+          suppressWalletTapUntil = Date.now() + 400;
+          if (Math.abs(currentX) > 48) geserWallet(currentX < 0 ? 1 : -1);
+        }
+        dragging = false;
+        currentX = 0;
       };
 
-      area.addEventListener('touchstart', (e) => {
-        if (e.target.closest('#walletStaticNotch')) return;
-        onStart(e.touches[0].clientX);
+      area.addEventListener('touchstart', (event) => {
+        if (event.target.closest('#walletStaticNotch')) return;
+        onStart(event.touches[0].clientX, event.touches[0].clientY);
       }, { passive: true });
-      area.addEventListener('touchmove', (e) => onMove(e.touches[0].clientX), { passive: true });
-      area.addEventListener('touchend', onEnd);
+      area.addEventListener('touchmove', (event) => {
+        if (event.touches.length) onMove(event.touches[0].clientX, event.touches[0].clientY);
+      }, { passive: true });
+      area.addEventListener('touchend', onEnd, { passive: true });
+      area.addEventListener('touchcancel', onEnd, { passive: true });
     }
 
     // ========================================================================
@@ -2705,7 +2760,49 @@
       }
     }
 
+    // Kunci request yang mengubah saldo agar tidak terkirim dua kali.
+    let transferRequestPending = false;
+    let editRequestPending = false;
+
+    function aturTombolProses(btnId, isProcessing, label) {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      if (!btn.dataset.defaultContent) btn.dataset.defaultContent = btn.innerHTML;
+      btn.disabled = isProcessing;
+      btn.setAttribute('aria-busy', isProcessing ? 'true' : 'false');
+      btn.classList.toggle('action-btn-pending', isProcessing);
+      btn.innerHTML = isProcessing
+        ? `<span class="inline-flex items-center justify-center gap-2"><i data-lucide="loader-circle" class="w-4 h-4 animate-spin" aria-hidden="true"></i><span>${label}</span></span>`
+        : btn.dataset.defaultContent;
+      refreshIcons();
+    }
+
+    function aturStatusTransfer(isProcessing) {
+      transferRequestPending = isProcessing;
+      aturTombolProses('btnKirimTransfer', isProcessing, 'Memproses transfer...');
+      const modal = document.getElementById('modalTransfer');
+      if (modal) {
+        modal.querySelectorAll('input, select').forEach(el => { el.disabled = isProcessing; });
+        const close = modal.querySelector('button[onclick^="tutupModal"]');
+        if (close) close.disabled = isProcessing;
+      }
+    }
+
+    function aturStatusEditTransaksi(isProcessing, action = 'simpan') {
+      editRequestPending = isProcessing;
+      // Disable both actions so saving and deleting cannot overlap.
+      aturTombolProses('btnSimpanEditTrx', isProcessing, action === 'simpan' ? 'Menyimpan perubahan...' : 'Simpan Perubahan');
+      aturTombolProses('btnHapusTrx', isProcessing, action === 'hapus' ? 'Menghapus transaksi...' : 'Hapus');
+      const modal = document.getElementById('modalEditTrx');
+      if (modal) {
+        modal.querySelectorAll('input, select').forEach(el => { el.disabled = isProcessing; });
+        const close = modal.querySelector('button[onclick^="tutupModal"]');
+        if (close) close.disabled = isProcessing;
+      }
+    }
+
     function prosesKirimTransfer() {
+      if (transferRequestPending) return;
       const payload = {
         dariWallet: document.getElementById('trfDariWallet').value,
         keWallet: document.getElementById('trfKeWallet').value,
@@ -2717,22 +2814,35 @@
         tampilkanToast('Nominal transfer harus lebih dari 0');
         return;
       }
+      if (!payload.dariWallet || !payload.keWallet || payload.dariWallet.toLowerCase() === payload.keWallet.toLowerCase()) {
+        tampilkanToast('Pilih dua wallet yang berbeda.');
+        return;
+      }
+
+      aturStatusTransfer(true);
+      const selesai = (res) => {
+        aturStatusTransfer(false);
+        if (!res || !res.success) {
+          tampilkanToast(res && res.message ? res.message : 'Transfer gagal disimpan.');
+          return;
+        }
+        tampilkanToast(res.message || 'Transfer berhasil dicatat!');
+        document.getElementById('trfNominal').value = '';
+        document.getElementById('trfKeterangan').value = '';
+        tutupModal('modalTransfer');
+        muatDataDashboard(false);
+      };
 
       if (!isGasEnvironment) {
-        tutupModal('modalTransfer');
-        tampilkanToast('Transfer berhasil dicatat!');
+        selesai({ success: true, message: 'Transfer berhasil dicatat (Preview)!' });
         return;
       }
 
       google.script.run
-        .withSuccessHandler((res) => {
-          tampilkanToast(res.message);
-          if (res.success) {
-            document.getElementById('trfNominal').value = '';
-            document.getElementById('trfKeterangan').value = '';
-            tutupModal('modalTransfer');
-            muatDataDashboard(false);
-          }
+        .withSuccessHandler(selesai)
+        .withFailureHandler((err) => {
+          aturStatusTransfer(false);
+          tampilkanToast('Error transfer: ' + (err && err.message ? err.message : 'Koneksi gagal'));
         })
         .transferAntarWallet(payload);
     }
@@ -3171,6 +3281,7 @@
     }
 
     function bukaModalEditTransaksi(rowIndex) {
+      if (editRequestPending) return;
       const trx = (appState.transaksi || []).find(t => Number(t.rowIndex) === Number(rowIndex));
       if (!trx) return;
 
@@ -3185,6 +3296,7 @@
     }
 
     function simpanPerubahanTransaksi() {
+      if (editRequestPending) return;
       const payload = {
         rowIndex: Number(document.getElementById('editRowIndex').value),
         jenis: document.getElementById('editJenis').value,
@@ -3193,39 +3305,67 @@
         nominal: Number(document.getElementById('editNominal').value) || 0,
         keterangan: document.getElementById('editKeterangan').value.trim()
       };
+      if (!payload.rowIndex || payload.nominal <= 0) {
+        tampilkanToast('Masukkan nominal transaksi yang valid.');
+        return;
+      }
+
+      aturStatusEditTransaksi(true, 'simpan');
+      const selesai = (res) => {
+        aturStatusEditTransaksi(false);
+        if (!res || !res.success) {
+          tampilkanToast(res && res.message ? res.message : 'Gagal menyimpan perubahan.');
+          return;
+        }
+        tampilkanToast(res.message || 'Transaksi berhasil diperbarui.');
+        tutupModal('modalEditTrx');
+        muatDataDashboard(false);
+      };
 
       if (!isGasEnvironment) {
-        tutupModal('modalEditTrx');
-        tampilkanToast('Transaksi diperbarui (Preview)');
+        selesai({ success: true, message: 'Transaksi diperbarui (Preview)' });
         return;
       }
 
       google.script.run
-        .withSuccessHandler((res) => {
-          tampilkanToast(res.message);
-          if (res.success) {
-            tutupModal('modalEditTrx');
-            muatDataDashboard(false);
-          }
+        .withSuccessHandler(selesai)
+        .withFailureHandler((err) => {
+          aturStatusEditTransaksi(false);
+          tampilkanToast('Error simpan: ' + (err && err.message ? err.message : 'Koneksi gagal'));
         })
         .editTransaksi(payload);
     }
 
     function konfirmasiHapusTransaksi() {
+      if (editRequestPending) return;
       const rowIndex = Number(document.getElementById('editRowIndex').value);
-      if (!isGasEnvironment) {
+      if (!rowIndex || rowIndex < 2) {
+        tampilkanToast('Transaksi tidak valid.');
+        return;
+      }
+
+      aturStatusEditTransaksi(true, 'hapus');
+      const selesai = (res) => {
+        aturStatusEditTransaksi(false);
+        if (!res || !res.success) {
+          tampilkanToast(res && res.message ? res.message : 'Gagal menghapus transaksi.');
+          return;
+        }
+        tampilkanToast(res.message || 'Transaksi berhasil dihapus.');
         tutupModal('modalEditTrx');
-        tampilkanToast('Transaksi dihapus (Preview)');
+        muatDataDashboard(false);
+      };
+
+      if (!isGasEnvironment) {
+        selesai({ success: true, message: 'Transaksi dihapus (Preview)' });
         return;
       }
 
       google.script.run
-        .withSuccessHandler((res) => {
-          tampilkanToast(res.message);
-          if (res.success) {
-            tutupModal('modalEditTrx');
-            muatDataDashboard(false);
-          }
+        .withSuccessHandler(selesai)
+        .withFailureHandler((err) => {
+          aturStatusEditTransaksi(false);
+          tampilkanToast('Error hapus: ' + (err && err.message ? err.message : 'Koneksi gagal'));
         })
         .hapusTransaksi(rowIndex);
     }
@@ -3796,6 +3936,7 @@
     }
 
     function tutupModal(id) {
+      if ((id === 'modalTransfer' && transferRequestPending) || (id === 'modalEditTrx' && editRequestPending)) return;
       const el = document.getElementById(id);
       if (!el) return;
       el.classList.add('hidden');
