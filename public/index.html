@@ -107,16 +107,35 @@
       align-items: center;
       justify-content: flex-end;
       padding: 0;
+      pointer-events: auto;
+    }
+    .chat-ai-pill-glow {
+      background: linear-gradient(135deg, #B5F83A 0%, #D8FF70 100%);
+      box-shadow: 0 8px 24px -2px rgba(181, 248, 58, 0.52), 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
     }
     .wallet-card-spring {
-      transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s ease;
+      transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, box-shadow 0.28s ease;
+      will-change: transform, opacity;
     }
     .wallet-card-dragging {
       transition: none !important;
+      cursor: grabbing !important;
     }
-    .chat-ai-pill-glow {
-      background: linear-gradient(135deg, #B5F83A 0%, #9EE61E 100%);
-      box-shadow: 0 0 22px rgba(181, 248, 58, 0.48), 0 6px 16px rgba(0, 0, 0, 0.45);
+    .wallet-shimmer {
+      position: relative;
+      overflow: hidden;
+    }
+    .wallet-shimmer::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%);
+      transform: translateX(-100%);
+      transition: transform 0.75s ease;
+      pointer-events: none;
+    }
+    .wallet-shimmer:hover::after {
+      transform: translateX(100%);
     }
     /* iOS Home Screen / PWA: hindari konten tertutup status bar & home indicator. */
     html {
@@ -132,7 +151,7 @@
     }
     #appScrollArea {
       box-sizing: border-box;
-      height: 100vh; /* fallback untuk browser lama */
+      height: 100vh;
       height: 100dvh;
       padding-top: env(safe-area-inset-top, 0px);
       padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
@@ -141,11 +160,9 @@
       overscroll-behavior-y: contain;
       -webkit-overflow-scrolling: touch;
     }
-    /* Navigation tetap di atas home indicator dengan ruang yang konsisten. */
     #bottomAppNav {
       bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     }
-    /* Background diperpanjang ke safe area di semua sisi. */
     body::before {
       content: '';
       position: fixed;
@@ -163,7 +180,7 @@
 <body class="bg-obsidian-gradient overflow-hidden select-none">
 
   <!-- SVG ClipPath Responsif untuk Lekukan Cutout Asli pada Kartu Wallet -->
-  <svg width="0" height="0" class="absolute pointer-events-none" aria-hidden="true">
+  <svg class="fixed -top-10 -left-10 w-1 h-1 opacity-0 pointer-events-none" aria-hidden="true">
     <defs>
       <clipPath id="walletCutoutClip" clipPathUnits="objectBoundingBox">
         <path d="M 0.072,0 L 0.928,0 Q 1,0 1,0.16 L 1,0.585 Q 1,0.722 0.935,0.722 L 0.642,0.722 Q 0.582,0.722 0.582,0.861 Q 0.582,1 0.518,1 L 0.072,1 Q 0,1 0,0.84 L 0,0.16 Q 0,0 0.072,0 Z" />
@@ -199,7 +216,7 @@
     </div>
 
     <!-- ====================================================================
-         SUB-TAB 1: DOMPET, SALDO GABUNGAN & STACKED CARD + ADD CARD NOTCH
+         SUB-TAB 1: DOMPET, SALDO GABUNGAN & STACKED CARD + LIMIT NOTCH
          ==================================================================== -->
     <div id="homeSubPanelDompet" class="space-y-4">
       <!-- Header Ringkas Total Saldo Gabungan -->
@@ -226,12 +243,6 @@
         </div>
 
         <div class="flex items-center gap-2 pt-1">
-          <button type="button" onclick="bukaModalApiKey()" id="btnHeaderApiKey"
-            title="Pengaturan Gemini API Key"
-            class="relative w-10 h-10 rounded-full bg-[#21232E] hover:bg-[#2B2E3C] border border-white/[0.08] text-slate-200 flex items-center justify-center transition active:scale-95">
-            <i data-lucide="key-round" class="w-4 h-4"></i>
-            <span id="dotStatusApiKey" class="hidden absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400"></span>
-          </button>
           <button type="button" onclick="bukaModalLimit()" id="btnHeaderLimit"
             title="Atur Limit Pengeluaran"
             class="w-10 h-10 rounded-full bg-[#21232E] hover:bg-[#2B2E3C] border border-white/[0.08] text-slate-200 flex items-center justify-center transition active:scale-95">
@@ -245,7 +256,7 @@
         </div>
       </header>
 
-      <!-- Kartu Stack Dompet Interaktif dengan Cutout Notch Mini Progress Bar Limit (Reference 1) -->
+      <!-- Kartu Stack Dompet Interaktif dengan Cutout Notch Mini Progress Bar Limit -->
       <section aria-label="Kartu Wallet" class="space-y-2.5 pt-1">
         <div class="flex items-center justify-between px-1">
           <div class="flex items-center gap-2">
@@ -564,7 +575,7 @@
         </div>
       </div>
 
-      <!-- Panel Filter Akordeon (Tersembunyi default agar halaman utama lega) -->
+      <!-- Panel Filter Akordeon -->
       <div id="filterAkordeonBody" class="hidden space-y-2.5 pt-2 border-t border-white/[0.07]">
         <div class="grid grid-cols-2 gap-2">
           <select id="filterWaktu" onchange="renderDaftarTransaksi()"
@@ -1312,69 +1323,29 @@
     </div>
   </div>
 
-  <!-- ======================================================================
-       MODAL 5: PENGATURAN GEMINI API KEY (SIMPAN KE SCRIPT PROPERTIES)
-       ====================================================================== -->
-  <div id="modalApiKey" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4">
-    <div class="glass-card w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 border-t border-white/15">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-[#B5F83A]/15 text-[#B5F83A]">
-            <i data-lucide="key-round" class="w-4 h-4"></i>
-          </div>
-          <h3 class="text-base font-bold text-white">Gemini API Key</h3>
-        </div>
-        <button type="button" onclick="tutupModal('modalApiKey')" class="p-2 rounded-xl bg-white/[0.06] text-slate-300 hover:text-white">
-          <i data-lucide="x" class="w-4 h-4"></i>
-        </button>
-      </div>
-
-      <div class="p-3.5 rounded-2xl bg-white/[0.04] border border-white/[0.08] space-y-1.5">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-white">Status Koneksi AI</span>
-          <span id="badgeModalApiKeyStatus" class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
-            Belum Diisi
-          </span>
-        </div>
-        <p id="textModalApiKeyHint" class="text-[11px] text-slate-400">
-          Dapatkan API Key gratis di <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" class="text-[#B5F83A] underline">Google AI Studio</a>, lalu tempelkan di bawah ini.
-        </p>
-      </div>
-
-      <div class="space-y-1.5">
-        <label class="block text-[11px] font-medium text-slate-400">Tempel GEMINI_API_KEY (AIzaSy...)</label>
-        <div class="relative flex items-center">
-          <input type="password" id="inputGeminiApiKey" autocomplete="off" placeholder="AIzaSy..."
-            class="glass-input font-mono-num w-full rounded-xl pl-3.5 pr-10 py-2.5 text-xs font-semibold" />
-          <button type="button" onclick="toggleLihatInputApiKey()" title="Tampilkan / Sembunyikan Key"
-            class="absolute right-2.5 p-1 text-slate-400 hover:text-white">
-            <i data-lucide="eye" id="iconToggleApiKey" class="w-4 h-4"></i>
-          </button>
-        </div>
-      </div>
-
-      <button type="button" id="btnSimpanApiKey" onclick="simpanPengaturanApiKey()"
-        class="w-full py-2.5 rounded-xl bg-[#B5F83A] hover:brightness-105 text-[#16171F] text-xs font-extrabold shadow-lg transition">
-        Simpan & Aktifkan Gemini AI
-      </button>
-    </div>
-  </div>
-
   <!-- Toast Notification -->
   <div id="toastNotif" class="fixed top-4 left-1/2 -translate-x-1/2 z-[60] hidden items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#111827]/95 backdrop-blur-xl border border-white/15 text-xs font-semibold text-white shadow-2xl max-w-[90vw]">
     <span id="toastText">Notifikasi</span>
   </div>
 
   <!-- ======================================================================
-       JAVASCRIPT LOGIC (GAS + SANDBOX PREVIEW COMPATIBLE)
+       JAVASCRIPT LOGIC (CLOUDFLARE PAGES /API BRIDGE + SANDBOX PREVIEW)
        ====================================================================== -->
-
-  <!-- Cloudflare adapter: replaces google.script.run with an async API bridge. -->
   <script>
   (function () {
-    const isSandboxPreview = (window.location.protocol === 'about:' || window.location.protocol === 'blob:');
-    if (isSandboxPreview) return;
-    if (window.google && window.google.script && window.google.script.run) return;
+    if (window.google && window.google.script && window.google.script.run) {
+      window.__isNativeGas = true;
+      return;
+    }
+    window.__isNativeGas = false;
+
+    const isSandboxPreviewOrigin = (
+      window.location.protocol === 'about:' ||
+      window.location.protocol === 'file:' ||
+      window.location.protocol === 'blob:' ||
+      !window.location.origin ||
+      window.location.origin === 'null'
+    );
 
     function makeRunner(success, failure) {
       return new Proxy({}, {
@@ -1384,6 +1355,13 @@
           if (prop === 'withUserObject') return () => makeRunner(success, failure);
           if (typeof prop !== 'string' || prop === 'then') return undefined;
           return (...args) => {
+            if (isSandboxPreviewOrigin) {
+              const previewErr = new Error('PREVIEW_NO_API');
+              previewErr.isPreviewNoApi = true;
+              if (typeof failure === 'function') setTimeout(() => failure(previewErr), 60);
+              return;
+            }
+
             fetch('/api', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1391,18 +1369,30 @@
               body: JSON.stringify({ action: prop, args })
             })
               .then(async response => {
-                if (!response.ok) throw new Error('HTTP ' + response.status + '. Periksa login Cloudflare Access / konfigurasi API.');
-                const data = await response.json();
-                if (!data.success) throw new Error(data.message || 'API error');
+                const rawText = await response.text();
+                let data = null;
+                try { data = JSON.parse(rawText); } catch (e) {}
+
+                const isHtmlFallback = !data && rawText.trim().startsWith('<');
+                if (!data && (response.status === 404 || response.status === 405 || isHtmlFallback)) {
+                  const previewErr = new Error('PREVIEW_NO_API');
+                  previewErr.isPreviewNoApi = true;
+                  throw previewErr;
+                }
+                if (!response.ok) {
+                  const detail = data && data.message ? data.message : ('HTTP ' + response.status + '. Periksa login Cloudflare Access / konfigurasi API.');
+                  throw new Error(detail);
+                }
+                if (!data || !data.success) throw new Error((data && data.message) || 'API error');
                 return data;
               })
               .then(result => { if (typeof success === 'function') success(result); })
               .catch(err => {
-                if (typeof failure === 'function') failure(err);
-                else {
-                  console.error('API request failed:', err);
-                  if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + err.message);
+                if (err instanceof TypeError) {
+                  err.isPreviewNoApi = true;
                 }
+                if (typeof failure === 'function') failure(err);
+                else { console.error('API request failed:', err); if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + err.message); }
               });
           };
         }
@@ -1411,8 +1401,9 @@
     window.google = { script: { run: makeRunner(null, null) } };
   })();
   </script>
+
   <script>
-    const isGasEnvironment = (typeof google !== 'undefined' && google.script && google.script.run);
+    let isGasEnvironment = true;
 
     // State Aplikasi
     let appState = {
@@ -1423,8 +1414,6 @@
       tagihanRutin: [],
       proyeksiGajian: null,
       limitConfig: { enabled: false, periode: 'harian', nominal: 150000 },
-      apiKeyConfigured: true,
-      apiKeyHint: '',
       activeWalletIndex: 0,
       activePage: 'home',
       activeHomeSubTab: 'dompet',
@@ -1499,24 +1488,22 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       try {
-        // Mulai dari bagian atas saat Home Screen app dibuka.
-        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-        const scrollArea = document.getElementById('appScrollArea');
-        if (scrollArea) scrollArea.scrollTop = 0;
+        appState.isNominalHidden = localStorage.getItem('keuangan_hide_nominal') === '1';
+        const savedObj = localStorage.getItem('keuangan_checked_obj');
+        if (savedObj) appState.checkedObjectives = JSON.parse(savedObj);
+      } catch (e) {}
 
-        try {
-          appState.isNominalHidden = (localStorage.getItem('keuangan_hide_nominal') === '1');
-        } catch (storageErr) {}
+      if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+      const scrollArea = document.getElementById('appScrollArea');
+      if (scrollArea) scrollArea.scrollTop = 0;
 
-        perbaruiIkonPrivasi();
-        setupSwipeGesture();
-        // Tunggu layout PWA iOS stabil sebelum pengambilan data pertama.
-        setTimeout(() => muatDataDashboard(false), 300);
-        refreshIcons();
-      } catch (initErr) {
-        console.error('Initialization error:', initErr);
-      }
+      perbaruiIkonPrivasi();
+      setupSwipeGesture();
+      setTimeout(() => muatDataDashboard(false), 120);
+      refreshIcons();
     });
+
+    window.addEventListener('load', refreshIcons);
 
     // ========================================================================
     // 1. NAVIGASI HALAMAN & SUB-TAB
@@ -1647,7 +1634,9 @@
       const terapkanData = (res) => {
         if (btnRef) btnRef.classList.remove('animate-spin');
         if (!res || !res.success) {
-          tampilkanToast(res && res.message ? res.message : 'Gagal memuat data');
+          const msg = res && res.message ? res.message : 'Gagal memuat data';
+          tampilkanToast(msg);
+          tampilkanErrorDaftarTransaksi(msg);
           return;
         }
 
@@ -1658,16 +1647,11 @@
         appState.tagihanRutin = res.tagihanRutin || [];
         appState.proyeksiGajian = res.proyeksiGajian || null;
         if (res.limitConfig) appState.limitConfig = res.limitConfig;
-        if (res.apiKeyStatus) {
-          appState.apiKeyConfigured = Boolean(res.apiKeyStatus.configured);
-          appState.apiKeyHint = res.apiKeyStatus.hint || '';
-        }
 
         if (appState.activeWalletIndex >= appState.wallets.length) {
           appState.activeWalletIndex = 0;
         }
 
-        perbaruiStatusApiKeyUI();
         renderTotalSaldo();
         renderWalletStack();
         renderLimitProgress();
@@ -1684,7 +1668,8 @@
         if (showToast) tampilkanToast('Data keuangan diperbarui!');
       };
 
-      if (!isGasEnvironment) {
+      const muatMockPreview = () => {
+        isGasEnvironment = false;
         const total = mockDatabase.wallets.reduce((acc, w) => acc + (Number(w.saldo) || 0), 0);
         terapkanData({
           success: true,
@@ -1699,6 +1684,10 @@
             estimasiSisaSaldoSetelahTagihan: total - mockDatabase.tagihanRutin.filter(t => t.aktif && !t.sudahTerbayarBulanIni).reduce((a, b) => a + b.nominal, 0)
           }
         });
+      };
+
+      if (!isGasEnvironment) {
+        muatMockPreview();
         return;
       }
 
@@ -1706,9 +1695,30 @@
         .withSuccessHandler(terapkanData)
         .withFailureHandler((err) => {
           if (btnRef) btnRef.classList.remove('animate-spin');
-          tampilkanToast('Error memuat data: ' + err.message);
+          if (err && err.isPreviewNoApi) {
+            muatMockPreview();
+            return;
+          }
+          const msg = err && err.message ? err.message : 'Gagal terhubung ke server';
+          tampilkanToast('Error memuat data: ' + msg);
+          tampilkanErrorDaftarTransaksi(msg);
         })
         .getDashboardData();
+    }
+
+    function tampilkanErrorDaftarTransaksi(pesan) {
+      const listEl = document.getElementById('listTransaksi');
+      if (!listEl) return;
+      listEl.innerHTML = `
+        <div class="rounded-2xl bg-rose-500/10 border border-rose-500/25 p-4 text-center space-y-2.5">
+          <p class="text-xs font-bold text-rose-300">Gagal Memuat Transaksi</p>
+          <p class="text-[11px] text-slate-300 leading-relaxed">${escapeHtml(pesan)}</p>
+          <button type="button" onclick="muatDataDashboard(true)"
+            class="px-4 py-2 rounded-xl bg-[#B5F83A] text-[#16171F] text-xs font-extrabold transition active:scale-95">
+            Coba Muat Ulang
+          </button>
+        </div>
+      `;
     }
 
     function urutkanWalletBcaDepan(list) {
@@ -2471,27 +2481,21 @@
       }
 
       const btn = document.getElementById('btnKirimAi');
-      const btnHtmlAsli = btn ? btn.innerHTML : '';
+      const origHtml = btn ? btn.innerHTML : '';
       if (btn) {
         btn.disabled = true;
         btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Memproses AI...</span>`;
         refreshIcons();
       }
 
-      const pulihkanTombol = () => {
+      const selesai = (res) => {
         if (btn) {
           btn.disabled = false;
-          btn.innerHTML = btnHtmlAsli;
+          btn.innerHTML = origHtml;
           refreshIcons();
         }
-      };
-
-      const selesai = (res) => {
-        pulihkanTombol();
         if (!res || !res.success) {
-          const msg = res && res.message ? res.message : 'Gagal memproses AI';
-          tampilkanToast(msg);
-          if (msg.includes('GEMINI_API_KEY')) bukaModalApiKey();
+          tampilkanToast(res && res.message ? res.message : 'Gagal memproses AI');
           return;
         }
 
@@ -2537,10 +2541,12 @@
       google.script.run
         .withSuccessHandler(selesai)
         .withFailureHandler((err) => {
-          pulihkanTombol();
-          const msg = err && err.message ? err.message : 'Gagal terhubung ke AI';
-          tampilkanToast('Error AI: ' + msg);
-          if (msg.includes('GEMINI_API_KEY')) bukaModalApiKey();
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            refreshIcons();
+          }
+          tampilkanToast('Error AI: ' + err.message);
         })
         .prosesTransaksi(teks, 'Web App AI', imageData);
     }
@@ -2933,9 +2939,7 @@
       const selesai = (res) => {
         if (loadingEl) loadingEl.classList.add('hidden');
         if (!res || !res.success) {
-          const msg = res && res.message ? res.message : 'Gagal menjalankan analisis AI';
-          tampilkanToast(msg);
-          if (msg.includes('GEMINI_API_KEY')) bukaModalApiKey();
+          tampilkanToast(res && res.message ? res.message : 'Gagal menjalankan analisis AI');
           return;
         }
         appState.analisisCache[cacheKey] = res;
@@ -2975,9 +2979,7 @@
         .withSuccessHandler(selesai)
         .withFailureHandler((err) => {
           if (loadingEl) loadingEl.classList.add('hidden');
-          const msg = err && err.message ? err.message : 'Gagal analisis';
-          tampilkanToast('Error Analisis AI: ' + msg);
-          if (msg.includes('GEMINI_API_KEY')) bukaModalApiKey();
+          tampilkanToast('Error Analisis AI: ' + err.message);
         })
         .analisisKeuanganAI(mode, key);
     }
@@ -3123,12 +3125,11 @@
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const firstDayJs = new Date(year, month, 1).getDay(); // 0 = Min, 1 = Sen
-      const startOffset = firstDayJs === 0 ? 6 : firstDayJs - 1; // Senin awal minggu
+      const firstDayJs = new Date(year, month, 1).getDay();
+      const startOffset = firstDayJs === 0 ? 6 : firstDayJs - 1;
 
       const targetHarian = hitungTargetHarianKalender();
 
-      // Kelompokkan transaksi pada bulan & tahun terpilih
       const trxPerTanggal = {};
       const keluarPerTanggal = {};
       (appState.transaksi || []).forEach(t => {
@@ -3348,7 +3349,6 @@
         if (barEl) barEl.style.width = '0%';
       }
 
-      // Cek tagihan rutin yang jatuh tempo dalam <= 7 hari
       (appState.tagihanRutin || []).forEach(tr => {
         if (tr.aktif && !tr.sudahTerbayarBulanIni && Number(tr.sisaHariJatuhTempo) <= 7) {
           alerts.push({
@@ -3359,7 +3359,6 @@
         }
       });
 
-      // Cek status proyeksi gajian
       if (appState.proyeksiGajian && appState.proyeksiGajian.estimasiSisaSaldoSetelahTagihan < 0) {
         alerts.push({
           level: 'danger',
@@ -3395,96 +3394,8 @@
     }
 
     // ========================================================================
-    // 13. HELPERS (API KEY MODAL, MODAL, TOAST, FORMAT RUPIAH, ESCAPE HTML)
+    // 13. HELPERS (MODAL, TOAST, FORMAT RUPIAH, ESCAPE HTML)
     // ========================================================================
-    function perbaruiStatusApiKeyUI() {
-      const dot = document.getElementById('dotStatusApiKey');
-      const badge = document.getElementById('badgeModalApiKeyStatus');
-      const hint = document.getElementById('textModalApiKeyHint');
-
-      if (dot) {
-        dot.classList.toggle('hidden', Boolean(appState.apiKeyConfigured));
-      }
-      if (badge) {
-        if (appState.apiKeyConfigured) {
-          badge.textContent = 'Aktif (' + (appState.apiKeyHint || 'Tersimpan') + ')';
-          badge.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#B5F83A]/20 text-[#B5F83A]';
-        } else {
-          badge.textContent = 'Belum Diisi';
-          badge.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300';
-        }
-      }
-      if (hint && appState.apiKeyConfigured) {
-        hint.innerHTML = 'API Key sudah tersimpan aman di Script Properties Google Apps Script. Anda bisa menggantinya kapan saja di bawah ini.';
-      }
-    }
-
-    function bukaModalApiKey() {
-      perbaruiStatusApiKeyUI();
-      const input = document.getElementById('inputGeminiApiKey');
-      if (input) input.value = '';
-      bukaModal('modalApiKey');
-    }
-
-    function toggleLihatInputApiKey() {
-      const input = document.getElementById('inputGeminiApiKey');
-      const icon = document.getElementById('iconToggleApiKey');
-      if (!input) return;
-      const isPass = input.type === 'password';
-      input.type = isPass ? 'text' : 'password';
-      if (icon) {
-        icon.setAttribute('data-lucide', isPass ? 'eye-off' : 'eye');
-        refreshIcons();
-      }
-    }
-
-    function simpanPengaturanApiKey() {
-      const input = document.getElementById('inputGeminiApiKey');
-      const rawKey = input ? input.value.trim() : '';
-      if (!rawKey) {
-        tampilkanToast('Tempelkan GEMINI_API_KEY terlebih dahulu.');
-        return;
-      }
-
-      const btn = document.getElementById('btnSimpanApiKey');
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Menyimpan...';
-      }
-
-      const selesai = (res) => {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = 'Simpan & Aktifkan Gemini AI';
-        }
-        if (!res || !res.success) {
-          tampilkanToast(res && res.message ? res.message : 'Gagal menyimpan API Key');
-          return;
-        }
-        appState.apiKeyConfigured = true;
-        appState.apiKeyHint = res.hint || 'Tersimpan';
-        perbaruiStatusApiKeyUI();
-        tutupModal('modalApiKey');
-        tampilkanToast(res.message || 'GEMINI_API_KEY berhasil disimpan!');
-      };
-
-      if (!isGasEnvironment) {
-        selesai({ success: true, hint: rawKey.slice(0, 6) + '••••', message: 'API Key disimpan (Preview)!' });
-        return;
-      }
-
-      google.script.run
-        .withSuccessHandler(selesai)
-        .withFailureHandler((err) => {
-          if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Simpan & Aktifkan Gemini AI';
-          }
-          tampilkanToast('Error: ' + err.message);
-        })
-        .simpanGeminiApiKey(rawKey);
-    }
-
     function bukaModal(id) {
       const el = document.getElementById(id);
       if (!el) return;
