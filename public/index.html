@@ -177,9 +177,125 @@
       width: 0px;
       background: transparent;
     }
+
+    /* Loading screen minimal: identitas visual dark + lime + purple. */
+    .startup-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      padding: 28px 24px;
+      background: #16171F;
+      color: #F8FAFC;
+      opacity: 1;
+      visibility: visible;
+      transition: opacity .35s ease, visibility .35s ease;
+    }
+    .startup-screen.is-done { opacity: 0; visibility: hidden; pointer-events: none; }
+    .startup-inner { width: 100%; max-width: 300px; text-align: center; }
+    .startup-spinner {
+      width: 44px;
+      height: 44px;
+      box-sizing: border-box;
+      margin: 0 auto 30px;
+      border: 3px solid rgba(181,248,58,.13);
+      border-top-color: #B5F83A;
+      border-right-color: #6E3FF3;
+      border-radius: 50%;
+      animation: startup-spin 1s linear infinite;
+    }
+    .startup-heading {
+      margin: 0;
+      color: #F8FAFC;
+      font-size: 21px;
+      font-weight: 800;
+      line-height: 1.35;
+      letter-spacing: -.035em;
+    }
+    .startup-copy {
+      margin: 9px auto 0;
+      color: #94A3B8;
+      font-size: 12px;
+      line-height: 1.6;
+      font-weight: 500;
+      max-width: 260px;
+      min-height: 20px;
+    }
+    .startup-progress {
+      width: 160px;
+      height: 3px;
+      overflow: hidden;
+      border-radius: 99px;
+      margin: 27px auto 0;
+      background: rgba(255,255,255,.09);
+    }
+    .startup-progress-fill {
+      width: 38%;
+      height: 100%;
+      background: #B5F83A;
+      border-radius: inherit;
+      animation: startup-progress-move 1.5s ease-in-out infinite;
+    }
+    .startup-status {
+      margin: 13px 0 0;
+      color: #94A3B8;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    .startup-pulse-dot {
+      display: inline-block;
+      vertical-align: 1px;
+      width: 5px;
+      height: 5px;
+      margin-right: 7px;
+      border-radius: 50%;
+      background: #B5F83A;
+      animation: startup-dot 1.3s ease-in-out infinite;
+    }
+    .startup-retry {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      margin: 23px auto 0;
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 17px;
+      background: #B5F83A;
+      color: #16171F;
+      font: 800 12px 'Plus Jakarta Sans', sans-serif;
+      cursor: pointer;
+    }
+    .startup-retry.is-visible { display: inline-flex; }
+    .startup-retry:focus-visible { outline: 2px solid #FFF; outline-offset: 4px; }
+    .startup-screen.is-error .startup-spinner { animation: none; border-color: rgba(251,113,133,.18); border-top-color: #FB7185; }
+    .startup-screen.is-error .startup-progress-fill { animation: none; width: 100%; background: #FB7185; }
+    .startup-screen.is-error .startup-pulse-dot { animation: none; background: #FB7185; }
+    @keyframes startup-spin { to { transform: rotate(360deg); } }
+    @keyframes startup-progress-move { from { transform: translateX(-110%); } to { transform: translateX(350%); } }
+    @keyframes startup-dot { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .startup-spinner, .startup-progress-fill, .startup-pulse-dot { animation: none !important; }
+      .startup-screen { transition-duration: .1s; }
+    }
   </style>
 </head>
 <body class="bg-obsidian-gradient overflow-hidden select-none">
+
+
+  <!-- Loading screen minimal. Tetap terlihat hingga data saldo berhasil dirender. -->
+  <div id="startupScreen" class="startup-screen" role="status" aria-live="polite" aria-label="Memuat data keuangan">
+    <div class="startup-inner">
+      <div class="startup-spinner" aria-hidden="true"></div>
+      <h1 id="startupHeading" class="startup-heading">Menyiapkan dompetmu</h1>
+      <p id="startupDescription" class="startup-copy">Mengambil saldo dan transaksi terbaru...</p>
+      <div class="startup-progress" aria-hidden="true"><div class="startup-progress-fill"></div></div>
+      <p id="startupStatus" class="startup-status"><span class="startup-pulse-dot"></span>Menyinkronkan data keuangan...</p>
+      <button type="button" id="startupRetry" class="startup-retry" onclick="muatDataDashboard(false)">Coba Muat Lagi</button>
+    </div>
+  </div>
 
   <!-- SVG ClipPath Responsif untuk Lekukan Cutout Asli pada Kartu Wallet -->
   <svg width="0" height="0" class="absolute pointer-events-none" aria-hidden="true">
@@ -1372,6 +1488,65 @@
   <script>
     const isGasEnvironment = (typeof google !== 'undefined' && google.script && google.script.run);
 
+
+    // Loader hanya untuk kunjungan pertama. Hilang setelah angka saldo dirender.
+    let startupDashboardReady = false;
+    let dashboardLoadSequence = 0;
+    let startupSlowTimer = null;
+
+    function mulaiStartupLoading() {
+      if (startupDashboardReady) return;
+      const screen = document.getElementById('startupScreen');
+      const heading = document.getElementById('startupHeading');
+      const description = document.getElementById('startupDescription');
+      const status = document.getElementById('startupStatus');
+      const retry = document.getElementById('startupRetry');
+      if (!screen) return;
+      screen.classList.remove('is-error');
+      if (heading) heading.textContent = 'Menyiapkan dompetmu';
+      if (description) description.textContent = 'Mengambil saldo dan transaksi terbaru...';
+      if (status) status.innerHTML = '<span class="startup-pulse-dot"></span>Menyinkronkan data keuangan...';
+      if (retry) retry.classList.remove('is-visible');
+      clearTimeout(startupSlowTimer);
+      // Koneksi lambat tidak memaksa halaman tampil dengan saldo Rp 0.
+      startupSlowTimer = setTimeout(() => {
+        if (startupDashboardReady) return;
+        if (description) description.textContent = 'Koneksi memerlukan waktu lebih lama dari biasanya.';
+        if (status) status.innerHTML = '<span class="startup-pulse-dot"></span>Masih menghubungkan ke Google Sheets...';
+        if (retry) retry.classList.add('is-visible');
+      }, 15000);
+    }
+
+    function gagalStartupLoading(message) {
+      if (startupDashboardReady) return;
+      clearTimeout(startupSlowTimer);
+      const screen = document.getElementById('startupScreen');
+      if (screen) screen.classList.add('is-error');
+      const heading = document.getElementById('startupHeading');
+      const description = document.getElementById('startupDescription');
+      const status = document.getElementById('startupStatus');
+      const retry = document.getElementById('startupRetry');
+      if (heading) heading.textContent = 'Saldo belum bisa dimuat';
+      if (description) description.textContent = 'Belum terhubung ke data wallet. Silakan coba lagi.';
+      if (status) {
+        status.textContent = String(message || 'Gagal memuat data.').slice(0, 170);
+      }
+      if (retry) retry.classList.add('is-visible');
+    }
+
+    function selesaiStartupLoading() {
+      if (startupDashboardReady) return;
+      startupDashboardReady = true;
+      clearTimeout(startupSlowTimer);
+      // Dua frame memastikan angka saldo sudah masuk DOM dan sempat dilukis browser.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const screen = document.getElementById('startupScreen');
+        if (!screen) return;
+        screen.classList.add('is-done');
+        setTimeout(() => screen.remove(), 550);
+      }));
+    }
+
     // State Aplikasi
     let appState = {
       totalSaldo: 0,
@@ -1594,13 +1769,19 @@
     // 2. MUAT DATA DASHBOARD & SINKRONISASI UI
     // ========================================================================
     function muatDataDashboard(showToast = false) {
+      // Balasan dari retry/request lama tidak boleh menimpa data yang lebih baru.
+      const requestId = ++dashboardLoadSequence;
+      if (!startupDashboardReady) mulaiStartupLoading();
       const btnRef = document.getElementById('btnRefresh');
       if (btnRef) btnRef.classList.add('animate-spin');
 
       const terapkanData = (res) => {
+        if (requestId !== dashboardLoadSequence) return;
         if (btnRef) btnRef.classList.remove('animate-spin');
         if (!res || !res.success) {
-          tampilkanToast(res && res.message ? res.message : 'Gagal memuat data');
+          const pesan = res && res.message ? res.message : 'Gagal memuat data';
+          if (!startupDashboardReady) gagalStartupLoading(pesan);
+          else tampilkanToast(pesan);
           return;
         }
 
@@ -1628,6 +1809,8 @@
         renderKalenderBulanan();
         renderNotifikasiTab();
         refreshIcons();
+        // Jangan menutup loading sebelum saldo dan wallet selesai dirender.
+        selesaiStartupLoading();
 
         if (showToast) tampilkanToast('Data keuangan diperbarui!');
       };
@@ -1653,8 +1836,11 @@
       google.script.run
         .withSuccessHandler(terapkanData)
         .withFailureHandler((err) => {
+          if (requestId !== dashboardLoadSequence) return;
           if (btnRef) btnRef.classList.remove('animate-spin');
-          tampilkanToast('Error memuat data: ' + err.message);
+          const pesan = 'Error memuat data: ' + (err && err.message ? err.message : 'Koneksi gagal');
+          if (!startupDashboardReady) gagalStartupLoading(pesan);
+          else tampilkanToast(pesan);
         })
         .getDashboardData();
     }
