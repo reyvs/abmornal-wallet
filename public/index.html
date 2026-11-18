@@ -4,8 +4,8 @@
   <link rel="icon" type="image/png" href="https://lh3.googleusercontent.com/d/11zRucTlb86ArDAEIEcfBpd1hRkLxRb-g">
   <link rel="apple-touch-icon" href="https://lh3.googleusercontent.com/d/11zRucTlb86ArDAEIEcfBpd1hRkLxRb-g">
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#06080E" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=auto" />
+  <meta name="theme-color" content="#16171F" />
   <meta name="color-scheme" content="dark" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -20,6 +20,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    // iOS standalone can return zero safe-area insets even with the Home indicator.
+    // Match platform geometry before first paint, without reading personal data.
+    (function () {
+      var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isStandalone = navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+      if (isIOS && isStandalone) document.documentElement.classList.add('ios-standalone');
+    })();
+  </script>
   <style>
     :root {
       color-scheme: dark;
@@ -137,72 +146,75 @@
     .wallet-shimmer:hover::after {
       transform: translateX(100%);
     }
-    /* iOS Home Screen / PWA: hindari konten tertutup status bar & home indicator. */
+    /* iOS Home Screen: use a fixed root shell, not a chain of 100dvh/100% heights.
+       With viewport-fit=auto, standalone WebKit avoids its black-bottom-strip
+       regression on affected devices. The safe Home indicator space is kept within
+       the usable viewport, so the navigation remains visible and tappable. */
+    :root {
+      --app-safe-top: env(safe-area-inset-top, 0px);
+      --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    html.ios-standalone {
+      --app-safe-bottom: max(env(safe-area-inset-bottom, 0px), 26px);
+    }
     html {
-      height: 100%;
-      height: 100dvh;
+      width: 100%;
+      height: auto;
+      min-height: 100%;
+      overflow: hidden;
       background: #16171F;
     }
     body {
-      height: 100%;
-      height: 100dvh;
-      min-height: 100%;
-      background-color: #16171F;
-    }
-    #appScrollArea {
-      box-sizing: border-box;
-      height: 100vh; /* fallback untuk browser lama */
-      height: 100dvh;
-      padding-top: env(safe-area-inset-top, 0px);
-      padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
-      overflow-x: hidden;
-      overflow-y: auto;
-      overscroll-behavior-y: contain;
-      -webkit-overflow-scrolling: touch;
-    }
-    /* Navigation tetap di atas home indicator dengan ruang yang konsisten. */
-    #bottomAppNav {
-      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-    }
-    /* Background diperpanjang ke safe area di semua sisi. */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: #16171F;
-      z-index: -1;
-      pointer-events: none;
-    }
-    #appScrollArea::-webkit-scrollbar {
-      width: 0px;
-      background: transparent;
-    }
-
-    /* iPhone Home Screen/PWA: app canvas fills the entire visual viewport. */
-    html, body { min-height: 100%; height: 100%; overflow: hidden; background: #16171F; }
-    #appScrollArea {
       position: fixed;
       inset: 0;
       width: 100%;
       height: auto;
       min-height: 0;
+      overflow: hidden;
+      background: #16171F;
+    }
+    #appScrollArea {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: auto;
+      min-height: 0;
       box-sizing: border-box;
-      padding-top: max(0px, env(safe-area-inset-top, 0px));
-      padding-bottom: calc(7.75rem + env(safe-area-inset-bottom, 0px));
+      padding-top: var(--app-safe-top);
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+      padding-bottom: calc(7.75rem + var(--app-safe-bottom));
       background:
         radial-gradient(ellipse at 11% 0%, rgba(110, 63, 243, .15), transparent 42%),
         radial-gradient(ellipse at 92% 7%, rgba(181, 248, 58, .08), transparent 36%),
         linear-gradient(180deg, #16171F 0%, #191B24 58%, #16171F 100%);
       overflow-x: hidden;
       overflow-y: auto;
+      overscroll-behavior-y: contain;
       -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    #appScrollArea::-webkit-scrollbar { display: none; }
+    /* Paint the entire viewport and the standalone safe-area surfaces. */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: -2px;
+      z-index: -1;
+      pointer-events: none;
+      background: #16171F;
     }
     #bottomAppNav {
-      bottom: calc(max(10px, env(safe-area-inset-bottom, 0px)) + 6px);
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: calc(10px + var(--app-safe-bottom));
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
       transition: opacity .65s ease, transform .75s cubic-bezier(.22,1,.36,1);
     }
     #toastNotif {
-      top: max(18px, calc(env(safe-area-inset-top, 0px) + 14px));
+      top: max(18px, calc(var(--app-safe-top) + 14px));
       box-sizing: border-box;
       width: max-content;
       max-width: calc(100vw - 32px);
@@ -225,9 +237,9 @@
       to { opacity: 1; transform: translate3d(0, 0, 0); filter: blur(0); }
     }
 
-    /* Full-screen Aurora loader with progress shown by the rising gradient level. */
+    /* Floating liquid aurora: the visible gradient itself rises from bottom to top.
+       Canvas renders an organic wave-front and drifting lime/purple light fields. */
     .startup-screen {
-      --loader-progress: 0%;
       position: fixed;
       inset: 0;
       z-index: 100;
@@ -244,76 +256,14 @@
       transition: opacity .9s cubic-bezier(.22,1,.36,1), visibility .9s;
     }
     .startup-screen.is-done { opacity: 0; visibility: hidden; pointer-events: none; }
-    .startup-progress {
+    .startup-liquid-canvas {
       position: absolute;
       inset: 0;
-      overflow: hidden;
       z-index: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
       pointer-events: none;
-    }
-    .startup-progress-fill {
-      position: absolute;
-      inset: 0;
-      clip-path: inset(calc(100% - var(--loader-progress)) 0 0 0);
-      transition: clip-path .55s cubic-bezier(.22,1,.36,1);
-      will-change: clip-path;
-    }
-    .startup-progress-fill::after {
-      content: '';
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: calc(100% - var(--loader-progress));
-      height: 2px;
-      background: linear-gradient(90deg, rgba(181,248,58,0) 0%, rgba(181,248,58,.9) 26%, rgba(115,78,255,.95) 72%, rgba(115,78,255,0) 100%);
-      box-shadow: 0 0 26px rgba(181,248,58,.3), 0 0 34px rgba(111,62,255,.34);
-      transform: translateY(-1px);
-      transition: top .55s cubic-bezier(.22,1,.36,1);
-    }
-    .startup-aurora { position: absolute; inset: -10%; pointer-events: none; z-index: 0; }
-    .startup-wave {
-      position: absolute;
-      width: 164%;
-      height: 72%;
-      bottom: -29%;
-      left: -33%;
-      border-radius: 49% 51% 60% 40% / 55% 55% 45% 45%;
-      filter: blur(37px);
-      opacity: .9;
-      will-change: transform;
-      transform-origin: center;
-    }
-    .startup-wave--purple {
-      background: radial-gradient(ellipse at 42% 41%, rgba(131, 55, 255, .94) 0%, rgba(109, 51, 230, .7) 31%, rgba(75, 24, 165, .13) 69%, transparent 79%);
-      animation: wallet-aurora-rise 7.2s ease-in-out infinite alternate;
-    }
-    .startup-wave--lime {
-      width: 170%; height: 58%; left: -27%; bottom: -12%;
-      border-radius: 45% 55% 40% 60% / 43% 59% 41% 57%;
-      background: radial-gradient(ellipse at 56% 24%, rgba(181,248,58,.95) 0%, rgba(111,209,38,.64) 26%, rgba(56,139,44,.14) 59%, transparent 78%);
-      animation: wallet-aurora-lime 8.1s ease-in-out infinite alternate;
-      mix-blend-mode: screen;
-    }
-    .startup-wave--purple-top {
-      width: 120%; height: 54%; left: -42%; bottom: 8%;
-      opacity: .65;
-      background: radial-gradient(ellipse at 55% 55%, rgba(109,58,235,.8) 0%, rgba(80,38,200,.32) 40%, transparent 75%);
-      animation: wallet-aurora-side 9s ease-in-out infinite alternate;
-    }
-    .startup-aurora::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(180deg, rgba(2,5,5,.65) 0%, rgba(2,5,5,.28) 25%, transparent 42%, transparent 74%, rgba(2,5,5,.24) 100%);
-    }
-    .startup-grain {
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      pointer-events: none;
-      opacity: .12;
-      mix-blend-mode: screen;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.54'/%3E%3C/svg%3E");
     }
     .startup-inner {
       position: relative;
@@ -328,7 +278,7 @@
       color: #F8FAFC;
       font: 800 clamp(17px, 4.5vw, 21px)/1.4 'Plus Jakarta Sans', sans-serif;
       letter-spacing: -.035em;
-      text-shadow: 0 4px 32px rgba(0,0,0,.5);
+      text-shadow: 0 4px 32px rgba(0,0,0,.55);
       animation: startup-text-breathe 2.9s ease-in-out infinite;
     }
     .startup-retry {
@@ -346,20 +296,7 @@
     }
     .startup-retry.is-visible { display: inline-flex; }
     .startup-screen.is-error .startup-heading { animation: none; }
-    @keyframes wallet-aurora-rise {
-      from { transform: translate3d(-8%, 10%, 0) rotate(-22deg) scale(1); }
-      to { transform: translate3d(13%, -30%, 0) rotate(-6deg) scale(1.22); }
-    }
-    @keyframes wallet-aurora-lime {
-      from { transform: translate3d(8%, 23%, 0) rotate(-25deg) scale(1); }
-      to { transform: translate3d(-18%, -41%, 0) rotate(-5deg) scale(1.25); }
-    }
-    @keyframes wallet-aurora-side {
-      from { transform: translate3d(-8%, 8%, 0) rotate(20deg) scale(.94); }
-      to { transform: translate3d(31%, -39%, 0) rotate(37deg) scale(1.12); }
-    }
-    @keyframes startup-text-breathe { 0%,100% { opacity: .82; } 50% { opacity: 1; } }
-
+    @keyframes startup-text-breathe { 0%,100% { opacity: .84; } 50% { opacity: 1; } }
     /* Compact smart input suggestions / busy state. */
     .ai-chip-scroll {
       display: flex;
@@ -391,7 +328,7 @@
     .ai-busy-dot { width: 7px; height: 7px; border-radius: 50%; background: #B5F83A; box-shadow: 0 0 0 4px rgba(181,248,58,.1); animation: startup-text-breathe 1.05s ease-in-out infinite; flex: 0 0 auto; }
     #btnKirimAi:disabled { opacity: .78; cursor: progress; filter: saturate(.8); }
     @media (prefers-reduced-motion: reduce) {
-      .startup-wave, .startup-heading, .ai-busy-dot { animation: none !important; }
+      .startup-heading, .ai-busy-dot { animation: none !important; }
       .startup-screen { transition-duration: .1s; }
       body.ui-ready #pageHome .ui-reveal { animation-duration: .1s; animation-delay: 0s; }
       #bottomAppNav { transition-duration: .1s; transition-delay: 0s; }
@@ -401,18 +338,9 @@
 <body class="bg-obsidian-gradient overflow-hidden select-none is-booting">
 
 
-  <!-- Single-label floating aurora loader with vertical progress level, visible until the dashboard data is ready. -->
+  <!-- Organic liquid gradient rises with loading state. No percentage or progress bar. -->
   <div id="startupScreen" class="startup-screen" role="status" aria-live="polite" aria-label="Memuat data keuangan">
-    <div class="startup-progress" aria-hidden="true">
-      <div id="startupProgressFill" class="startup-progress-fill">
-        <div class="startup-aurora">
-          <div class="startup-wave startup-wave--purple"></div>
-          <div class="startup-wave startup-wave--lime"></div>
-          <div class="startup-wave startup-wave--purple-top"></div>
-        </div>
-      </div>
-    </div>
-    <div class="startup-grain" aria-hidden="true"></div>
+    <canvas id="startupLiquidCanvas" class="startup-liquid-canvas" aria-hidden="true"></canvas>
     <div class="startup-inner">
       <h1 id="startupHeading" class="startup-heading">Menyiapkan dompetmu</h1>
       <button type="button" id="startupRetry" class="startup-retry" onclick="muatDataDashboard(false)">Coba muat lagi</button>
@@ -1622,19 +1550,129 @@
     const isGasEnvironment = (typeof google !== 'undefined' && google.script && google.script.run);
 
 
-    // Loader hanya untuk kunjungan pertama. Progress terlihat dari posisi gradient yang naik dari bawah ke atas.
+    // Single-label loader: liquid aurora moves up in sync with the estimated loading state.
+    // API supplies no percent progress, so it rises slowly to ~86% while waiting and
+    // only fills the screen completely after the dashboard response is rendered.
     let startupDashboardReady = false;
     let dashboardLoadSequence = 0;
     let startupSlowTimer = null;
     let startupProgress = 0;
     let startupProgressTimer = null;
+    let startupLiquidFrame = 0;
+    let startupLiquidVisual = 0;
+    let startupLiquidPrevTime = 0;
+    let startupLiquidSize = { width: 0, height: 0, scale: 1 };
+    let startupLiquidFinishStart = 0;
+    let startupLiquidFinishFrom = 0;
+    const startupReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    function setStartupProgress(value, instant = false) {
+    function setStartupProgress(value) {
       startupProgress = Math.max(0, Math.min(100, Number(value) || 0));
+    }
+
+    function drawStartupLiquid(time) {
+      const canvas = document.getElementById('startupLiquidCanvas');
       const screen = document.getElementById('startupScreen');
-      if (!screen) return;
-      if (instant) screen.style.setProperty('--loader-progress', startupProgress + '%');
-      else requestAnimationFrame(() => screen.style.setProperty('--loader-progress', startupProgress + '%'));
+      if (!canvas || !screen || screen.classList.contains('is-done')) return;
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) return;
+
+      const w = Math.max(1, screen.clientWidth);
+      const h = Math.max(1, screen.clientHeight);
+      // Limit pixel work for battery life on retina iPhones while keeping soft gradients clean.
+      const scale = Math.min(window.devicePixelRatio || 1, 1.5);
+      if (startupLiquidSize.width !== w || startupLiquidSize.height !== h || startupLiquidSize.scale !== scale) {
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        startupLiquidSize = { width: w, height: h, scale };
+      }
+      context.setTransform(scale, 0, 0, scale, 0, 0);
+      const dt = startupLiquidPrevTime ? Math.min(0.08, (time - startupLiquidPrevTime) / 1000) : 0.016;
+      startupLiquidPrevTime = time;
+
+      if (startupLiquidFinishStart) {
+        const u = Math.min(1, (time - startupLiquidFinishStart) / 850);
+        const ease = 1 - Math.pow(1 - u, 3);
+        startupLiquidVisual = startupLiquidFinishFrom + (100 - startupLiquidFinishFrom) * ease;
+      } else if (startupReducedMotion) {
+        startupLiquidVisual = startupProgress;
+      } else {
+        startupLiquidVisual += (startupProgress - startupLiquidVisual) * (1 - Math.exp(-dt * 2.9));
+      }
+      const progress = Math.max(0, Math.min(1, startupLiquidVisual / 100));
+      const secs = time / 1000;
+      context.fillStyle = '#030707';
+      context.fillRect(0, 0, w, h);
+
+      if (progress > 0.002) {
+        // A true moving waterline: two long waves, gently drifting sideways.
+        // At completion it travels past the top so the entire screen is filled.
+        const baseY = h * (1 - progress) - (progress > .995 ? 40 : 0);
+        const amplitude = (startupReducedMotion ? 0 : Math.min(34, w * .074)) * Math.sin(Math.PI * Math.min(.999, progress)) + 4;
+        const waveY = x => baseY
+          + amplitude * Math.sin((x / w) * Math.PI * 2.1 + secs * 1.05)
+          + amplitude * .48 * Math.sin((x / w) * Math.PI * 4.05 - secs * .68 + .55);
+
+        context.beginPath();
+        context.moveTo(0, waveY(0));
+        for (let x = 9; x < w + 9; x += 9) context.lineTo(x, waveY(Math.min(x, w)));
+        context.lineTo(w, h + 30);
+        context.lineTo(0, h + 30);
+        context.closePath();
+        context.save();
+        context.clip();
+        const colorBase = context.createLinearGradient(0, baseY, w * .25, h);
+        colorBase.addColorStop(0, '#151025');
+        colorBase.addColorStop(.32, '#40159a');
+        colorBase.addColorStop(.7, '#26134d');
+        colorBase.addColorStop(1, '#090e15');
+        context.fillStyle = colorBase;
+        context.fillRect(0, 0, w, h);
+
+        // Aurora light is painted inside the liquid body, and moves independently
+        // of the waterline instead of revealing a static background.
+        const blob = (cx, cy, rx, ry, rgb, alpha) => {
+          context.save();
+          context.translate(cx, cy);
+          context.scale(Math.max(1, rx), Math.max(1, ry));
+          const g = context.createRadialGradient(0, 0, 0, 0, 0, 1);
+          g.addColorStop(0, `rgba(${rgb},${alpha})`);
+          g.addColorStop(.37, `rgba(${rgb},${alpha * .68})`);
+          g.addColorStop(.72, `rgba(${rgb},${alpha * .19})`);
+          g.addColorStop(1, `rgba(${rgb},0)`);
+          context.fillStyle = g;
+          context.fillRect(-1, -1, 2, 2);
+          context.restore();
+        };
+        const drift = startupReducedMotion ? 0 : secs;
+        blob(w * (.15 + .14 * Math.sin(drift * .38)), baseY + h * .2, w * .92, h * .5, '119,54,248', .87);
+        blob(w * (.85 + .14 * Math.sin(drift * .27 + 1)), baseY + h * .04, w * .63, h * .28, '181,248,58', .89);
+        blob(w * (.12 + .2 * Math.sin(drift * .31 + 2)), baseY + h * .02, w * .67, h * .2, '109,203,47', .7);
+        blob(w * (.73 + .13 * Math.cos(drift * .43)), baseY + h * .48, w * .88, h * .52, '113,48,243', .96);
+        blob(w * (.44 + .18 * Math.sin(drift * .25 + 1.4)), baseY + h * .29, w * .5, h * .21, '50,155,85', .4);
+        context.restore();
+
+        // Diffuse luminous wavecrest. Its glow follows the same animated curve.
+        if (!startupReducedMotion && progress < .999) {
+          const crest = context.createLinearGradient(0, 0, w, 0);
+          crest.addColorStop(0, 'rgba(136,78,250,.06)');
+          crest.addColorStop(.34, 'rgba(154,79,245,.48)');
+          crest.addColorStop(.72, 'rgba(181,248,58,.44)');
+          crest.addColorStop(1, 'rgba(181,248,58,.08)');
+          context.beginPath();
+          context.moveTo(0, waveY(0));
+          for (let x = 9; x < w + 9; x += 9) context.lineTo(x, waveY(Math.min(x, w)));
+          // A very soft luminous edge, without the hard colored outline.
+          context.save();
+          context.globalAlpha = .52;
+          context.lineWidth = 18;
+          context.filter = 'blur(14px)';
+          context.strokeStyle = crest;
+          context.stroke();
+          context.restore();
+        }
+      }
+      startupLiquidFrame = requestAnimationFrame(drawStartupLiquid);
     }
 
     function mulaiAnimasiProgressStartup() {
@@ -1644,10 +1682,9 @@
           clearInterval(startupProgressTimer);
           return;
         }
-        const limit = 84;
-        if (startupProgress >= limit) return;
-        const next = startupProgress + (startupProgress < 24 ? 8 : startupProgress < 54 ? 6 : 3.5);
-        setStartupProgress(Math.min(limit, next));
+        if (startupProgress >= 86) return;
+        const next = startupProgress + (startupProgress < 22 ? 6 : startupProgress < 52 ? 3.6 : startupProgress < 74 ? 2.1 : .8);
+        setStartupProgress(Math.min(86, next));
       }, 360);
     }
 
@@ -1660,15 +1697,16 @@
       screen.classList.remove('is-error');
       if (heading) heading.textContent = 'Menyiapkan dompetmu';
       if (retry) retry.classList.remove('is-visible');
-      setStartupProgress(6, true);
+      if (!startupLiquidFrame) startupLiquidFrame = requestAnimationFrame(drawStartupLiquid);
+      // On retry, keep the current waterline rather than visually running backwards.
+      if (startupProgress === 0) setStartupProgress(0);
       mulaiAnimasiProgressStartup();
       clearTimeout(startupSlowTimer);
-      // Beri opsi ulang untuk koneksi sangat lambat, tanpa menampilkan saldo palsu.
       startupSlowTimer = setTimeout(() => {
         if (startupDashboardReady) return;
         if (heading) heading.textContent = 'Masih menyiapkan dompetmu';
         if (retry) retry.classList.add('is-visible');
-        setStartupProgress(Math.max(startupProgress, 90));
+        setStartupProgress(Math.max(startupProgress, 88));
       }, 15000);
     }
 
@@ -1693,7 +1731,9 @@
       clearTimeout(startupSlowTimer);
       clearInterval(startupProgressTimer);
       setStartupProgress(100);
-      // After the saldo is painted, let the gradient finish reaching the top, then crossfade the aurora as panels rise in sequence.
+      startupLiquidFinishFrom = startupLiquidVisual;
+      startupLiquidFinishStart = performance.now();
+      // The gradient reaches the TOP before the UI begins its staggered entrance.
       setTimeout(() => {
         requestAnimationFrame(() => requestAnimationFrame(() => {
           document.body.classList.remove('is-booting');
@@ -1701,9 +1741,13 @@
           const screen = document.getElementById('startupScreen');
           if (!screen) return;
           screen.classList.add('is-done');
-          setTimeout(() => screen.remove(), 1050);
+          setTimeout(() => {
+            if (startupLiquidFrame) cancelAnimationFrame(startupLiquidFrame);
+            startupLiquidFrame = 0;
+            screen.remove();
+          }, 1050);
         }));
-      }, 560);
+      }, 900);
     }
 
     // State Aplikasi
